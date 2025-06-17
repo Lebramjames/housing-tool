@@ -352,35 +352,39 @@ def scrape_main():
     else:
         logging.info("No existing data found. Starting fresh scrape.")
 
+    max_retries = 3
+
+
     if os.path.exists(output_path):
         print(f"File {output_path} already exists. Loading existing data.")
         df = pd.read_csv(output_path)
     else:
         print(f"File {output_path} does not exist. Starting fresh scrape.")
-        df = pd.DataFrame()
+        df = pd.DataFrame()  # <-- move this up before retry loop
         counter = 0
-        for page in pages:
 
+    for page in pages:
+        for attempt in range(max_retries):
             try:
-                print(f"Processing page {page}...")
-                
+                print(f"Processing page {page}, attempt {attempt + 1}...")
                 page_df = get_page_information(page)
 
-                logging.info(f"Page {page} processed with {len(page_df)} records.")
-
-                if page_df is not None:
+                if page_df is not None and not page_df.empty:
+                    logging.info(f"✅ Page {page} processed with {len(page_df)} records.")
                     df = pd.concat([df, page_df], ignore_index=True)
+                    break  # Exit retry loop if success
                 else:
-                    print(f"Skipping page {page} due to data mismatch.")
-                df = pd.concat([df, page_df], ignore_index=True)
+                    logging.warning(f"⚠️ Page {page} returned no data on attempt {attempt + 1}.")
             except Exception as e:
-                print(f"Error processing page {page}: {e}")
-                break
-        df.drop_duplicates(subset=['street_name', 'number'], inplace=True)
-        df.reset_index(drop=True, inplace=True)
-        df = merge_with_existing_geo(df, existing_df)
-        # df = add_neighborhood_info(df)
+                logging.error(f"❌ Error processing page {page} on attempt {attempt + 1}: {e}")
+                if attempt == max_retries - 1:
+                    logging.error(f"⛔ Max retries reached for page {page}. Skipping.")
 
+    df.drop_duplicates(subset=['street_name', 'number'], inplace=True)
+    df.reset_index(drop=True, inplace=True)
+    df = merge_with_existing_geo(df, existing_df)
+    df = add_neighborhood_info(df)
+    
     if not df.empty:
         df.to_csv(output_path, index=False)
         print(f"Data saved to {output_path}")
