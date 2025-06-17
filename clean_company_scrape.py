@@ -2,6 +2,7 @@
 import pandas as pd
 import re
 import numpy as np
+import os
 from datetime import datetime, timedelta
 
 def get_aangeboden_date(val, reference_date=None):
