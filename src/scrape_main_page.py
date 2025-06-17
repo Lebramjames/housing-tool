@@ -36,9 +36,17 @@ def get_page_information(page_number):
         logging.error(f"Failed to retrieve HTML for page {page_number}.")
         return None
     
+    logging.info(f"Successfully retrieved HTML for page {page_number}.")
+    logging.info(f"Snipped of the HTML content: {html[:200]}...")  # Log first 200 characters for debugging
+    logging.info(f"Length of HTML content: {len(html)} characters.")
+    
 
     # Extract JSON-LD data block
     soup = BeautifulSoup(html, 'html.parser')
+
+    logging.info("Parsing HTML to find JSON-LD script block...")
+    logging.info(f"Total script tags found: {len(soup.find_all('script'))}")
+    
     json_ld = soup.find('script', {'type': 'application/ld+json'})
     if json_ld is None:
         print("No JSON-LD script block found on page.")

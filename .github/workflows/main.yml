@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+  schedule:
+    - cron: '0 6 * * *'  # Runs daily at 06:00 UTC
+
 jobs:
   build:
     runs-on: ubuntu-latest
