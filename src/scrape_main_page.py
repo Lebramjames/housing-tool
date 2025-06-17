@@ -270,40 +270,63 @@ from selenium.webdriver.edge.options import Options
 from selenium.webdriver.edge.service import Service
 import os
 
-def get_html_with_and_without_cookie(url=None):
+# def get_html_with_and_without_cookie(url=None):
+#     from selenium.webdriver.common.by import By
+#     from selenium.webdriver.support.ui import WebDriverWait
+#     from selenium.webdriver.support import expected_conditions as EC
+
+#     user_agent = (
+#         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+#         "AppleWebKit/537.36 (KHTML, like Gecko) "
+#         "Chrome/114.0.0.0 Safari/537.36"
+#     )
+
+#     options = Options()
+#     options.add_argument(f"user-agent={user_agent}")
+#     options.add_argument("--no-sandbox")
+#     options.add_argument("--disable-dev-shm-usage")
+#     options.add_argument("--headless")  # headless mode
+
+#     # use absolute path
+#     driver_path = os.path.join(os.getcwd(), 'src', "msedgedriver.exe")
+#     if not os.path.exists(driver_path):
+#         logging.error(f"❌ Edge driver not found at: {driver_path}")
+#         raise FileNotFoundError(f"Edge driver missing: {driver_path}")
+
+#     service = Service(driver_path)
+
+#     driver = webdriver.Edge(service=service, options=options)
+#     driver.get(url)
+
+#     # STEP 1: Save initial HTML (before accepting cookies)
+#     pre_cookie_html = driver.page_source
+#     print("✅ Saved HTML before accepting cookies")
+#     driver.quit()
+#     return pre_cookie_html
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+
+def get_html_with_and_without_cookie(url):
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
 
-    user_agent = (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/114.0.0.0 Safari/537.36"
-    )
-
     options = Options()
-    options.add_argument(f"user-agent={user_agent}")
+    options.add_argument("--headless")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--headless")  # headless mode
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
 
-    # use absolute path
-    driver_path = os.path.join(os.getcwd(), 'src', "msedgedriver.exe")
-    if not os.path.exists(driver_path):
-        logging.error(f"❌ Edge driver not found at: {driver_path}")
-        raise FileNotFoundError(f"Edge driver missing: {driver_path}")
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
 
-    service = Service(driver_path)
-
-    driver = webdriver.Edge(service=service, options=options)
     driver.get(url)
-
-    # STEP 1: Save initial HTML (before accepting cookies)
-    pre_cookie_html = driver.page_source
-    print("✅ Saved HTML before accepting cookies")
+    html = driver.page_source
+    print("✅ Page loaded and captured from ChromeDriver")
     driver.quit()
-    return pre_cookie_html
-
+    return html
 
 # Use the driver
 
