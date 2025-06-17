@@ -22,8 +22,10 @@ input_path  = os.path.join(os.getcwd(), 'data', f'funda_data_{today}.csv')
 df = pd.read_csv(input_path)
 
 # check how many new companies (aangeboden_date = yesterday) are in the data
-new_listings_count = df[df['aangeboden_date'] == pd.Timestamp.now().date() - pd.Timedelta(days=1)].shape[0]
-st.sidebar.write(f"New listings for {pd.Timestamp.now().date() - pd.Timedelta(days=1)}: {new_listings_count}")
+last_week = df[df['aangeboden_date'] >= pd.Timestamp.now().date() - pd.Timedelta(days=7)]
+# number of new listings this week: 
+new_listings_count = len(last_week)
+st.success(f"New listings this week: {new_listings_count}")
 
 with open("data/neighborhoods_amsterdam.json", "r") as f:
     geojson_data = json.load(f)
