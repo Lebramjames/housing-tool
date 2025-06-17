@@ -1,12 +1,13 @@
 # %%
-from src import scrape_main_page
+try:
+    from src import scrape_main_page
+    from src import scrape_company_page
+    from src import clean_company_scrape
+except ImportError:
+    import scrape_main_page
+    import scrape_company_page
+    import clean_company_scrape
 
-
-from src import scrape_company_page
-
-
-
-from src import clean_company_scrape
 
 
 
@@ -24,4 +25,3 @@ def run_scraper():
 if __name__ == "__main__":
     run_scraper()
     print("All scraping tasks completed successfully!")
-    

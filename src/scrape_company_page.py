@@ -6,8 +6,6 @@ warnings.filterwarnings("ignore", category=UserWarning, module='bs4')
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-
-
 import requests
 import warnings
 import re
