@@ -30,6 +30,13 @@ def get_page_information(page_number):
     url = f"https://www.funda.nl/zoeken/koop?selected_area=[%22amsterdam/straat-willem-de-zwijgerlaan,2km%22]&page={page_number}&price=%220-500000%22&object_type=[%22apartment%22]&search_result=1"
     html = get_html(url)
 
+    logging.info(f"Fetching page {page_number} from URL: {url}")
+
+    if html is None:
+        logging.error(f"Failed to retrieve HTML for page {page_number}.")
+        return None
+    
+
     # Extract JSON-LD data block
     soup = BeautifulSoup(html, 'html.parser')
     json_ld = soup.find('script', {'type': 'application/ld+json'})
