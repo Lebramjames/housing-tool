@@ -49,7 +49,7 @@ def get_valid_html_versions(page_number, service=None, options=None):
 
     # Fallback to Selenium if needed
     try:
-        pre_cookie_html = get_html_without_cookie(url, service=service, options=options)
+        pre_cookie_html = get_html_without_cookie(url=url, service=service, options=options)
         if pre_cookie_html:
             soup = BeautifulSoup(pre_cookie_html, 'html.parser')
             json_ld = soup.find('script', {'type': 'application/ld+json'})
@@ -279,8 +279,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-def get_html_without_cookie(service, options, url):
+def get_html_without_cookie(url, service=None, options=None)
     driver = webdriver.Chrome(service=service, options=options)
+
     driver.get(url)
     html = driver.page_source
     driver.quit()
