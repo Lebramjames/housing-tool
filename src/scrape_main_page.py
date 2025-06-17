@@ -26,24 +26,53 @@ def get_html(url):
         print(f"Failed to retrieve page with status code: {response.status_code}")
         return None
 
-
-def get_page_information(page_number):
-    url = f"https://www.funda.nl/zoeken/koop?selected_area=[%22amsterdam/straat-willem-de-zwijgerlaan,2km%22]&page={page_number}&price=%220-500000%22&object_type=[%22apartment%22]&search_result=1"
-    html = get_html(url)
-
+def get_valid_html_versions(page_number):
+    url = (
+        f"https://www.funda.nl/zoeken/koop?"
+        f"selected_area=[%22amsterdam/straat-willem-de-zwijgerlaan,2km%22]"
+        f"&page={page_number}&price=%220-500000%22"
+        f"&object_type=[%22apartment%22]&search_result=1"
+    )
     logging.info(f"Fetching page {page_number} from URL: {url}")
 
-    if html is None:
-        logging.error(f"Failed to retrieve HTML for page {page_number}.")
-        return None
-    
-    logging.info(f"Successfully retrieved HTML for page {page_number}.")
-    logging.info(f"Snipped of the HTML content: {html[:200]}...")  # Log first 200 characters for debugging
-    logging.info(f"Length of HTML content: {len(html)} characters.")
-    
+    # Try with requests first
+    html_req = get_html(url)
+    if html_req and "<title>Je bent bijna op de pagina die je zoekt" not in html_req and "captcha" not in html_req.lower():
+        soup = BeautifulSoup(html_req, 'html.parser')
+        json_ld = soup.find('script', {'type': 'application/ld+json'})
+        if json_ld:
+            logging.info("✅ Using HTML from requests (no Selenium needed).")
+            return html_req, soup, json_ld
+        else:
+            logging.warning("⚠️ HTML from requests is valid but JSON-LD not found.")
 
-    # Extract JSON-LD data block
-    soup = BeautifulSoup(html, 'html.parser')
+    # Fallback to Selenium if needed
+    try:
+        pre_cookie_html = get_html_with_and_without_cookie(url)
+        if pre_cookie_html:
+            soup = BeautifulSoup(pre_cookie_html, 'html.parser')
+            json_ld = soup.find('script', {'type': 'application/ld+json'})
+            if json_ld:
+                logging.info("✅ Using HTML from Selenium (pre-cookie).")
+                return pre_cookie_html, soup, json_ld
+    except Exception as e:
+        logging.error(f"❌ Selenium failed to fetch page {page_number}: {e}")
+
+    logging.error("❌ No valid HTML version with JSON-LD found after all attempts.")
+    return None, None, None
+
+
+def get_page_information(page_number):
+    """
+    Scrape the page information from Funda for a given page number.
+    Args:
+        page_number (int): The page number to scrape.
+    Returns:
+        pd.DataFrame: A DataFrame containing the scraped data.
+    """
+    logging.info(f"Starting to scrape page {page_number}...")
+
+    html, soup, json_ld = get_valid_html_versions(page_number)   
 
     logging.info("Parsing HTML to find JSON-LD script block...")
     logging.info(f"Total script tags found: {len(soup.find_all('script'))}")
@@ -56,6 +85,9 @@ def get_page_information(page_number):
     if json_ld is None:
         print("No JSON-LD script block found on page.")
         return None
+    if html is None:
+        return None
+    
     
     data = json.loads(json_ld.text)
     items = data['itemListElement']
@@ -233,6 +265,48 @@ def add_neighborhood_info(df):
 
     return df
 
+from selenium import webdriver
+from selenium.webdriver.edge.options import Options
+from selenium.webdriver.edge.service import Service
+import os
+
+def get_html_with_and_without_cookie(url=None):
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+
+    user_agent = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/114.0.0.0 Safari/537.36"
+    )
+
+    options = Options()
+    options.add_argument(f"user-agent={user_agent}")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--headless")  # headless mode
+
+    # use absolute path
+    driver_path = os.path.join(os.getcwd(), 'src', "msedgedriver.exe")
+    if not os.path.exists(driver_path):
+        logging.error(f"❌ Edge driver not found at: {driver_path}")
+        raise FileNotFoundError(f"Edge driver missing: {driver_path}")
+
+    service = Service(driver_path)
+
+    driver = webdriver.Edge(service=service, options=options)
+    driver.get(url)
+
+    # STEP 1: Save initial HTML (before accepting cookies)
+    pre_cookie_html = driver.page_source
+    print("✅ Saved HTML before accepting cookies")
+    driver.quit()
+    return pre_cookie_html
+
+
+# Use the driver
+
 import os
 from datetime import timedelta
 
@@ -264,12 +338,9 @@ def scrape_main():
         counter = 0
         for page in pages:
 
-            if counter % 10 == 0:
-                print(f"Processing page {page}...")
             try:
-                if page % 10 == 0:
-                    print(f"Processing page {page}...")
                 print(f"Processing page {page}...")
+                
                 page_df = get_page_information(page)
 
                 logging.info(f"Page {page} processed with {len(page_df)} records.")
@@ -294,4 +365,4 @@ def scrape_main():
 if __name__ == "__main__":
     scrape_main()
     print("Scraping completed successfully!")
-    
+# %%
