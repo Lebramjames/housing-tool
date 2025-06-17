@@ -7,7 +7,10 @@ import re
 import numpy as np
 import urllib3
 
+import warnings
+import logging
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 pages = np.arange(1, 100)  # Adjust range for more pages if needed
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -225,7 +228,10 @@ def scrape_main():
     else:
         print(f"File {output_path} does not exist. Starting fresh scrape.")
         df = pd.DataFrame()
+        counter = 0
         for page in pages:
+            if counter % 10 == 0:
+                print(f"Processing page {page}...")
             try:
                 if page % 10 == 0:
                     print(f"Processing page {page}...")

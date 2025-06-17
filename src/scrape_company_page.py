@@ -11,6 +11,9 @@ import warnings
 import re
 from bs4 import BeautifulSoup
 import json
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def get_html(url):
     headers = {
@@ -199,6 +202,8 @@ def scrape_company_information():
     df_working = df.copy()
 
     for idx, row in df_working.iterrows():
+        if idx % 10 == 0:
+            logging.info(f"Processing row {idx}/{len(df_working)}")
         url = row['url']
 
         # Skip if already processed
