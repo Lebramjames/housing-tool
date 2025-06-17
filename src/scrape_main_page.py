@@ -26,7 +26,8 @@ def get_html(url):
         print(f"Failed to retrieve page with status code: {response.status_code}")
         return None
 
-def get_valid_html_versions(page_number):
+def get_valid_html_versions(page_number, service=None, options=None):
+
     url = (
         f"https://www.funda.nl/zoeken/koop?"
         f"selected_area=[%22amsterdam/straat-willem-de-zwijgerlaan,2km%22]"
@@ -48,7 +49,7 @@ def get_valid_html_versions(page_number):
 
     # Fallback to Selenium if needed
     try:
-        pre_cookie_html = get_html_with_and_without_cookie(url)
+        pre_cookie_html = get_html_without_cookie(url, service=service, options=options)
         if pre_cookie_html:
             soup = BeautifulSoup(pre_cookie_html, 'html.parser')
             json_ld = soup.find('script', {'type': 'application/ld+json'})
@@ -62,7 +63,7 @@ def get_valid_html_versions(page_number):
     return None, None, None
 
 
-def get_page_information(page_number):
+def get_page_information(page_number, service=None, options=None):
     """
     Scrape the page information from Funda for a given page number.
     Args:
@@ -72,7 +73,7 @@ def get_page_information(page_number):
     """
     logging.info(f"Starting to scrape page {page_number}...")
 
-    html, soup, json_ld = get_valid_html_versions(page_number)   
+    html, soup, json_ld = get_valid_html_versions(page_number, service=service, options=options)
 
     logging.info("Parsing HTML to find JSON-LD script block...")
     logging.info(f"Total script tags found: {len(soup.find_all('script'))}")
@@ -270,70 +271,34 @@ from selenium.webdriver.edge.options import Options
 from selenium.webdriver.edge.service import Service
 import os
 
-# def get_html_with_and_without_cookie(url=None):
-#     from selenium.webdriver.common.by import By
-#     from selenium.webdriver.support.ui import WebDriverWait
-#     from selenium.webdriver.support import expected_conditions as EC
-
-#     user_agent = (
-#         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-#         "AppleWebKit/537.36 (KHTML, like Gecko) "
-#         "Chrome/114.0.0.0 Safari/537.36"
-#     )
-
-#     options = Options()
-#     options.add_argument(f"user-agent={user_agent}")
-#     options.add_argument("--no-sandbox")
-#     options.add_argument("--disable-dev-shm-usage")
-#     options.add_argument("--headless")  # headless mode
-
-#     # use absolute path
-#     driver_path = os.path.join(os.getcwd(), 'src', "msedgedriver.exe")
-#     if not os.path.exists(driver_path):
-#         logging.error(f"❌ Edge driver not found at: {driver_path}")
-#         raise FileNotFoundError(f"Edge driver missing: {driver_path}")
-
-#     service = Service(driver_path)
-
-#     driver = webdriver.Edge(service=service, options=options)
-#     driver.get(url)
-
-#     # STEP 1: Save initial HTML (before accepting cookies)
-#     pre_cookie_html = driver.page_source
-#     print("✅ Saved HTML before accepting cookies")
-#     driver.quit()
-#     return pre_cookie_html
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
-def get_html_with_and_without_cookie(url):
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
+def get_html_without_cookie(service, options, url):
+    driver = webdriver.Chrome(service=service, options=options)
+    driver.get(url)
+    html = driver.page_source
+    driver.quit()
+    return html
 
+
+import os
+from datetime import timedelta
+
+def scrape_main():
+
+    service = Service(ChromeDriverManager().install())
     options = Options()
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
 
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
-
-    driver.get(url)
-    html = driver.page_source
-    print("✅ Page loaded and captured from ChromeDriver")
-    driver.quit()
-    return html
-
-# Use the driver
-
-import os
-from datetime import timedelta
-
-def scrape_main():
 
     date = pd.Timestamp.now().strftime('%Y-%m-%d')
     output_path = f"data/funda_data_{date}.csv"
@@ -367,7 +332,7 @@ def scrape_main():
         for attempt in range(max_retries):
             try:
                 print(f"Processing page {page}, attempt {attempt + 1}...")
-                page_df = get_page_information(page)
+                page_df = get_page_information(page, service=service, options=options)
 
                 if page_df is not None and not page_df.empty:
                     logging.info(f"✅ Page {page} processed with {len(page_df)} records.")
@@ -379,6 +344,7 @@ def scrape_main():
                 logging.error(f"❌ Error processing page {page} on attempt {attempt + 1}: {e}")
                 if attempt == max_retries - 1:
                     logging.error(f"⛔ Max retries reached for page {page}. Skipping.")
+                    break
 
     df.drop_duplicates(subset=['street_name', 'number'], inplace=True)
     df.reset_index(drop=True, inplace=True)

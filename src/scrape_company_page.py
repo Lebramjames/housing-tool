@@ -13,6 +13,13 @@ from bs4 import BeautifulSoup
 import json
 import logging
 
+import time
+
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.edge.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def get_html(url):
@@ -25,6 +32,14 @@ def get_html(url):
     else:
         print(f"Failed to retrieve page with status code: {response.status_code}")
         return None
+    
+def get_html_without_cookie(service, options, url):
+    driver = webdriver.Chrome(service=service, options=options)
+    driver.get(url)
+    html = driver.page_source
+    driver.quit()
+    return html
+    
     
 
 def extract_indeling_info(html):
@@ -125,8 +140,6 @@ def extract_listing_data(html):
 
     return listing_data
 
-import re
-
 def extract_surface_areas(text):
     """
     Extracts surface area values in m² from structured Funda HTML/JS blocks.
@@ -191,8 +204,18 @@ def extract_kadastrale_info_from_flat_html(raw_text):
         "lasten": extract_value("cadastral-fees")
     }
 
+def get_valid_html_versions(url, service=None, options=None):
 
-def scrape_company_information():
+    html_req = get_html(url)
+    if html_req and "<title>Je bent bijna op de pagina die je zoekt" not in html_req and "captcha" not in html_req.lower():
+        return html_req
+    try: 
+        pre_cookie_html = get_html_without_cookie(url, service=service, options=options)
+        return pre_cookie_html
+    except Exception as e:
+        logging.error(f"❌ Selenium failed to fetch page {url}: {e}")
+
+def scrape_company_information(local = False):
     today = pd.Timestamp.now().strftime('%Y-%m-%d')
     input_path = os.path.join(os.getcwd(), 'data', f'funda_data_{today}.csv')
     df = pd.read_csv(input_path)
@@ -200,6 +223,22 @@ def scrape_company_information():
     # df price/m2 sort from low to high
     df.sort_values(by='price/m2', inplace=True)
     df_working = df.copy()
+
+    max_tries = 3
+    counter = 0
+
+    if local == True:
+    # use local msedgedriver.exe
+        service = Service('C:/Users/bgriffioen/OneDrive - STX Commodities B.V/Desktop/funda-project/funda-tool/msedgedriver.exe')
+    else:   
+        service = Service(ChromeDriverManager().install())
+
+    options = Options()
+    options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
+
 
     for idx, row in df_working.iterrows():
         if idx % 10 == 0:
@@ -210,42 +249,53 @@ def scrape_company_information():
         if pd.notna(row['indeling_kamers']):
             continue
 
-        counter += 1
-        print(f"Processing {counter}/{len(df_working)}: {url}")
+        for attempt in range(3):
+            try:
+                print(f"Attempt {attempt + 1}: {url}")
+                html = get_valid_html_versions(url, service=service, options=options)
 
-        html = get_html(url)
-        if not html:
-            continue
+                # Extract structured content
+                indeling_info = extract_indeling_info(html)
+                kadaster_info = extract_kadastrale_info_from_flat_html(html)
+                listing_data = extract_listing_data(html)
+                energy_label = extract_energy_label(html)
+                overdracht_info = extract_overdracht_from_json_block(html)
+                surface_info = extract_surface_areas(html)
 
-        # Extract structured content
-        indeling_info = extract_indeling_info(html)
-        kadaster_info = extract_kadastrale_info_from_flat_html(html)
-        listing_data = extract_listing_data(html)
-        energy_label = extract_energy_label(html)
-        overdracht_info = extract_overdracht_from_json_block(html)
-        surface_info = extract_surface_areas(html)
+                # Combine all extracted data
+                flat_data = {}
+                for key, value in {
+                    "indeling": indeling_info,
+                    "kadaster": kadaster_info,
+                    "listing_data": listing_data,
+                    "overdracht": overdracht_info,
+                    "surface": surface_info
+                }.items():
+                    if isinstance(value, dict):
+                        for sub_key, sub_value in value.items():
+                            flat_data[f"{key}_{sub_key}"] = sub_value
+                    else:
+                        flat_data[key] = value
 
-        # Combine all extracted data
-        flat_data = {}
-        for key, value in {
-            "indeling": indeling_info,
-            "kadaster": kadaster_info,
-            "listing_data": listing_data,
-            "overdracht": overdracht_info,
-            "surface": surface_info  # <--- NEW
-        }.items():
-            if isinstance(value, dict):
-                for sub_key, sub_value in value.items():
-                    flat_data[f"{key}_{sub_key}"] = sub_value
-            else:
-                flat_data[key] = value
-        flat_data["energy_label"] = energy_label
+                flat_data["energy_label"] = energy_label
 
+                # Update DataFrame
+                for col, val in flat_data.items():
+                    df_working.at[idx, col] = val
 
-        # Update DataFrame row
-        for col, val in flat_data.items():
-            df_working.at[idx, col] = val
+                logging.info(f"✅ Successfully processed: {url}")
+                break  # Break out of retry loop after success
 
-        # Save progress
-        output_path = os.path.join(os.getcwd(), 'data', f'funda_data_{today}.csv')
-        df_working.to_csv(output_path, index=False)
+            except Exception as e:
+                logging.warning(f"⚠️ Error on attempt {attempt + 1} for {url}: {e}")
+                if attempt == 2:
+                    logging.error(f"⛔ Max retries reached for {url}. Skipping.")
+                continue
+
+    output_path = os.path.join(os.getcwd(), 'data', f'funda_data_{today}.csv')
+    df_working.to_csv(output_path, index=False)
+    logging.info(f"🔄 Saved output to {output_path}")
+
+if __name__ == "__main__":
+    scrape_company_information(local=True)  # Set to True for local testing, False for production use
+    logging.info("Scraping completed successfully.")
