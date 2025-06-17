@@ -8,7 +8,13 @@ import geopandas as gpd
 import json
 from shapely.geometry import Point
 
-
+# add to the top of the page a title which date it was updated: 
+st.title("Funda Listings in Amsterdam - Updated: " + pd.Timestamp.now().strftime('%Y-%m-%d'))
+# and if it was able to find todays data
+if not os.path.exists(os.path.join(os.getcwd(), 'data', f'funda_data_{pd.Timestamp.now().strftime("%Y-%m-%d")}.csv')):
+    st.warning("No data found for today. Please run the scraper first to update the listings.")
+else:
+    st.success("Data for today found. You can filter the listings below.")
 
 # --- Load data ---
 today = pd.Timestamp.now().strftime('%Y-%m-%d')
@@ -150,7 +156,7 @@ if filter_kadaster_lasten:
     filtered_df = filtered_df[
         (filtered_df['kadaster_lasten_price'] < 100) | (filtered_df['kadaster_lasten_price'].isna())
     ]
-    
+
 if filter_eigendom:
     filtered_df = filtered_df[filtered_df['eigendom_year'] > 2035]
 
