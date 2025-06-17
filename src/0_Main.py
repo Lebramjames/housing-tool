@@ -128,14 +128,12 @@ selected_regions = st.multiselect(
 
 
 filtered_df = df[
-    (df['price_per_m2'] >= selected_range[0]) &
-    (df['price_per_m2'] <= selected_range[1]) &
-    (df['area'] >= area_range[0]) &
-    (df['area'] <= area_range[1]) &
-    (df['price'] >= price_range[0]) &
-    (df['price'] <= price_range[1]) &
-    (df['neighborhood'].isin(selected_regions) if selected_regions else True)
+    ((df['price_per_m2'] >= selected_range[0]) & (df['price_per_m2'] <= selected_range[1]) | (df['price_per_m2'].isna())) &
+    ((df['area'] >= area_range[0]) & (df['area'] <= area_range[1]) | (df['area'].isna())) &
+    ((df['price'] >= price_range[0]) & (df['price'] <= price_range[1]) | (df['price'].isna())) &
+    ((df['neighborhood'].isin(selected_regions)) if selected_regions else True)
 ]
+
 
 if filter_berging:
     filtered_df = filtered_df[filtered_df['has_berging'] == True]
@@ -144,21 +142,24 @@ if filter_servicekosten:
     filtered_df = filtered_df[
         (filtered_df['servicekosten_num'] < 100) | (filtered_df['servicekosten_num'].isna())
     ]
+
 if filter_beschikbaar:
     filtered_df = filtered_df[filtered_df['beschikbaar'] == True]
     
 if filter_kadaster_lasten:
-    filtered_df = filtered_df[filtered_df['kadaster_lasten_price'] < 100]
-
+    filtered_df = filtered_df[
+        (filtered_df['kadaster_lasten_price'] < 100) | (filtered_df['kadaster_lasten_price'].isna())
+    ]
+    
 if filter_eigendom:
     filtered_df = filtered_df[filtered_df['eigendom_year'] > 2035]
 
 filtered_df = filtered_df[
-    (filtered_df['num_kamers'] > min_kamers) &
-    (filtered_df['woonlagen_num'] < max_woonlagen) &
-    (filtered_df['aangeboden_date'] >= date_range[0]) &
-    (filtered_df['aangeboden_date'] <= date_range[1])
+    ((filtered_df['num_kamers'] > min_kamers) | (filtered_df['num_kamers'].isna())) &
+    ((filtered_df['woonlagen_num'] < max_woonlagen) | (filtered_df['woonlagen_num'].isna())) &
+    ((filtered_df['aangeboden_date'] >= date_range[0]) & (filtered_df['aangeboden_date'] <= date_range[1]))
 ]
+
 
 
 map_df = filtered_df.dropna(subset=["lat", "lon"])
