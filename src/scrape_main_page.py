@@ -33,6 +33,9 @@ def get_page_information(page_number):
     # Extract JSON-LD data block
     soup = BeautifulSoup(html, 'html.parser')
     json_ld = soup.find('script', {'type': 'application/ld+json'})
+    if json_ld is None:
+        print("No JSON-LD script block found on page.")
+        return None
     data = json.loads(json_ld.text)
     items = data['itemListElement']
 
@@ -213,14 +216,23 @@ import os
 from datetime import timedelta
 
 def scrape_main():
+    logging.info(f"Using existing data from {yesterday_path} if available.")
+    logging.info(f"Output will be saved to {output_path}")
+    logging.info(f"Total pages to scrape: {len(pages)}")
 
     date = pd.Timestamp.now().strftime('%Y-%m-%d')
     output_path = f"data/funda_data_{date}.csv"
 
     yesterday = (pd.Timestamp.now() - timedelta(days=1)).strftime('%Y-%m-%d')
     yesterday_path = f"data/funda_data_{yesterday}.csv"
-
     existing_df = pd.read_csv(yesterday_path) if os.path.exists(yesterday_path) else pd.DataFrame()
+
+
+    logging.info(f"Checking for existing data at {yesterday_path}...")
+    if not existing_df.empty:
+        logging.info(f"Found existing data with {len(existing_df)} rows.")
+    else:
+        logging.info("No existing data found. Starting fresh scrape.")
 
     if os.path.exists(output_path):
         print(f"File {output_path} already exists. Loading existing data.")
@@ -230,6 +242,7 @@ def scrape_main():
         df = pd.DataFrame()
         counter = 0
         for page in pages:
+
             if counter % 10 == 0:
                 print(f"Processing page {page}...")
             try:
@@ -237,6 +250,9 @@ def scrape_main():
                     print(f"Processing page {page}...")
                 print(f"Processing page {page}...")
                 page_df = get_page_information(page)
+
+                logging.info(f"Page {page} processed with {len(page_df)} records.")
+
                 if page_df is not None:
                     df = pd.concat([df, page_df], ignore_index=True)
                 else:
