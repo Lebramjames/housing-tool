@@ -195,7 +195,7 @@ def make_clickable(val):
 display_df = filtered_df[
     [
         "label",
-        "url"
+        "url",
         "price_per_m2",
         "num_kamers",
         "price",
