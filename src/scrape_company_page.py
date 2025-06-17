@@ -33,7 +33,7 @@ def get_html(url):
         print(f"Failed to retrieve page with status code: {response.status_code}")
         return None
     
-def get_html_without_cookie(service, options, url):
+def get_html_without_cookie(url, service=None, options=None):
     driver = webdriver.Chrome(service=service, options=options)
     driver.get(url)
     html = driver.page_source
