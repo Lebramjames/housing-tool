@@ -20,6 +20,7 @@ def get_html(url):
     }
     response = requests.get(url, headers=headers, verify=False)
     if response.status_code == 200:
+        logging.info(f"Successfully retrieved page: {url}")
         return response.text
     else:
         print(f"Failed to retrieve page with status code: {response.status_code}")
@@ -46,11 +47,16 @@ def get_page_information(page_number):
 
     logging.info("Parsing HTML to find JSON-LD script block...")
     logging.info(f"Total script tags found: {len(soup.find_all('script'))}")
+
     
     json_ld = soup.find('script', {'type': 'application/ld+json'})
+
+    logging.info(f"JSON-LD script block found: {json_ld is not None}")
+
     if json_ld is None:
         print("No JSON-LD script block found on page.")
         return None
+    
     data = json.loads(json_ld.text)
     items = data['itemListElement']
 
