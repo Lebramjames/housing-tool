@@ -195,19 +195,19 @@ def make_clickable(val):
 display_df = filtered_df[
     [
         "label",
-        "neighborhood",
+        "url"
+        "price_per_m2",
+        "num_kamers",
         "price",
         "area",
-        "price_per_m2",
+        "neighborhood",
         "has_berging",
         "aangeboden_date",
         "servicekosten_num",
         'energy_label',
         "eigendom_year",
-        "num_kamers",
         "woonlagen_num",
         "beschikbaar",
-        "url"
     ]
 ].rename(columns={
     "label": "full_address",
@@ -222,17 +222,8 @@ display_df["price/m2"] = display_df["price/m2"].round(0).astype(int)
 
 display_df["url"] = display_df["url"].apply(make_clickable)
 
-# Center the table using HTML/CSS
-st.write(
-    f"""
-    <div style="display: flex; justify-content: center;">
-        <div>
-            {display_df.to_html(escape=False, index=False)}
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+# Show the table without centering
+st.write(display_df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
 # --- Plot map with gradient ---
 if not map_df.empty:
