@@ -279,7 +279,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-def get_html_without_cookie(url, service=None, options=None)
+def get_html_without_cookie(url, service=None, options=None):
     driver = webdriver.Chrome(service=service, options=options)
 
     driver.get(url)
