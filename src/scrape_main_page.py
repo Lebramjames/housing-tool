@@ -216,9 +216,6 @@ import os
 from datetime import timedelta
 
 def scrape_main():
-    logging.info(f"Using existing data from {yesterday_path} if available.")
-    logging.info(f"Output will be saved to {output_path}")
-    logging.info(f"Total pages to scrape: {len(pages)}")
 
     date = pd.Timestamp.now().strftime('%Y-%m-%d')
     output_path = f"data/funda_data_{date}.csv"
@@ -227,6 +224,9 @@ def scrape_main():
     yesterday_path = f"data/funda_data_{yesterday}.csv"
     existing_df = pd.read_csv(yesterday_path) if os.path.exists(yesterday_path) else pd.DataFrame()
 
+    logging.info(f"Using existing data from {yesterday_path} if available.")
+    logging.info(f"Output will be saved to {output_path}")
+    logging.info(f"Total pages to scrape: {len(pages)}")
 
     logging.info(f"Checking for existing data at {yesterday_path}...")
     if not existing_df.empty:
