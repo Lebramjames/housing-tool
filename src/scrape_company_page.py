@@ -6,12 +6,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module='bs4')
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-today = pd.Timestamp.now().strftime('%Y-%m-%d')
-input_path = os.path.join(os.getcwd(), 'data', f'funda_data_{today}.csv')
-df = pd.read_csv(input_path)
 
-# df price/m2 sort from low to high
-df.sort_values(by='price/m2', inplace=True)
 
 import requests
 import warnings
@@ -196,57 +191,58 @@ def extract_kadastrale_info_from_flat_html(raw_text):
     }
 
 
-counter = 0
-df_working = df.copy()
+def scrape_company_information():
+    today = pd.Timestamp.now().strftime('%Y-%m-%d')
+    input_path = os.path.join(os.getcwd(), 'data', f'funda_data_{today}.csv')
+    df = pd.read_csv(input_path)
+
+    # df price/m2 sort from low to high
+    df.sort_values(by='price/m2', inplace=True)
+    df_working = df.copy()
+
+    for idx, row in df_working.iterrows():
+        url = row['url']
+
+        # Skip if already processed
+        if pd.notna(row['indeling_kamers']):
+            continue
+
+        counter += 1
+        print(f"Processing {counter}/{len(df_working)}: {url}")
+
+        html = get_html(url)
+        if not html:
+            continue
+
+        # Extract structured content
+        indeling_info = extract_indeling_info(html)
+        kadaster_info = extract_kadastrale_info_from_flat_html(html)
+        listing_data = extract_listing_data(html)
+        energy_label = extract_energy_label(html)
+        overdracht_info = extract_overdracht_from_json_block(html)
+        surface_info = extract_surface_areas(html)
+
+        # Combine all extracted data
+        flat_data = {}
+        for key, value in {
+            "indeling": indeling_info,
+            "kadaster": kadaster_info,
+            "listing_data": listing_data,
+            "overdracht": overdracht_info,
+            "surface": surface_info  # <--- NEW
+        }.items():
+            if isinstance(value, dict):
+                for sub_key, sub_value in value.items():
+                    flat_data[f"{key}_{sub_key}"] = sub_value
+            else:
+                flat_data[key] = value
+        flat_data["energy_label"] = energy_label
 
 
+        # Update DataFrame row
+        for col, val in flat_data.items():
+            df_working.at[idx, col] = val
 
-for idx, row in df_working.iterrows():
-    url = row['url']
-
-    # Skip if already processed
-    if pd.notna(row['indeling_kamers']):
-        print(f"Skipping {url} as it already has indeling_kamers.")
-        continue
-
-    counter += 1
-    print(f"Processing {counter}/{len(df_working)}: {url}")
-
-    html = get_html(url)
-    if not html:
-        continue
-
-    # Extract structured content
-    indeling_info = extract_indeling_info(html)
-    kadaster_info = extract_kadastrale_info_from_flat_html(html)
-    listing_data = extract_listing_data(html)
-    energy_label = extract_energy_label(html)
-    overdracht_info = extract_overdracht_from_json_block(html)
-    surface_info = extract_surface_areas(html)
-
-    # Combine all extracted data
-    flat_data = {}
-    for key, value in {
-        "indeling": indeling_info,
-        "kadaster": kadaster_info,
-        "listing_data": listing_data,
-        "overdracht": overdracht_info,
-        "surface": surface_info  # <--- NEW
-    }.items():
-        if isinstance(value, dict):
-            for sub_key, sub_value in value.items():
-                flat_data[f"{key}_{sub_key}"] = sub_value
-        else:
-            flat_data[key] = value
-    flat_data["energy_label"] = energy_label
-
-
-    # Update DataFrame row
-    for col, val in flat_data.items():
-        df_working.at[idx, col] = val
-
-    # Save progress
-    output_path = os.path.join(os.getcwd(), 'data', f'funda_data_{today}.csv')
-    df_working.to_csv(output_path, index=False)
-
-# %%
+        # Save progress
+        output_path = os.path.join(os.getcwd(), 'data', f'funda_data_{today}.csv')
+        df_working.to_csv(output_path, index=False)

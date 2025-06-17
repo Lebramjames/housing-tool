@@ -1,2 +1,6 @@
 geopy
 geopandas
+beautifulsoup4
+requests
+pandas
+numpy

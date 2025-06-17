@@ -209,39 +209,46 @@ def add_neighborhood_info(df):
 import os
 from datetime import timedelta
 
-date = pd.Timestamp.now().strftime('%Y-%m-%d')
-output_path = f"data/funda_data_{date}.csv"
+def scrape_main():
 
-yesterday = (pd.Timestamp.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-yesterday_path = f"data/funda_data_{yesterday}.csv"
+    date = pd.Timestamp.now().strftime('%Y-%m-%d')
+    output_path = f"data/funda_data_{date}.csv"
 
-existing_df = pd.read_csv(yesterday_path) if os.path.exists(yesterday_path) else pd.DataFrame()
+    yesterday = (pd.Timestamp.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    yesterday_path = f"data/funda_data_{yesterday}.csv"
 
-if os.path.exists(output_path):
-    print(f"File {output_path} already exists. Loading existing data.")
-    df = pd.read_csv(output_path)
-else:
-    print(f"File {output_path} does not exist. Starting fresh scrape.")
-    df = pd.DataFrame()
-    for page in pages:
-        try:
-            if page % 10 == 0:
+    existing_df = pd.read_csv(yesterday_path) if os.path.exists(yesterday_path) else pd.DataFrame()
+
+    if os.path.exists(output_path):
+        print(f"File {output_path} already exists. Loading existing data.")
+        df = pd.read_csv(output_path)
+    else:
+        print(f"File {output_path} does not exist. Starting fresh scrape.")
+        df = pd.DataFrame()
+        for page in pages:
+            try:
+                if page % 10 == 0:
+                    print(f"Processing page {page}...")
                 print(f"Processing page {page}...")
-            print(f"Processing page {page}...")
-            page_df = get_page_information(page)
-            if page_df is not None:
+                page_df = get_page_information(page)
+                if page_df is not None:
+                    df = pd.concat([df, page_df], ignore_index=True)
+                else:
+                    print(f"Skipping page {page} due to data mismatch.")
                 df = pd.concat([df, page_df], ignore_index=True)
-            else:
-                print(f"Skipping page {page} due to data mismatch.")
-            df = pd.concat([df, page_df], ignore_index=True)
-        except Exception as e:
-            print(f"Error processing page {page}: {e}")
-            break
-    df.drop_duplicates(subset=['street_name', 'number'], inplace=True)
-    df.reset_index(drop=True, inplace=True)
-    df = merge_with_existing_geo(df, existing_df)
-    # df = add_neighborhood_info(df)
+            except Exception as e:
+                print(f"Error processing page {page}: {e}")
+                break
+        df.drop_duplicates(subset=['street_name', 'number'], inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        df = merge_with_existing_geo(df, existing_df)
+        # df = add_neighborhood_info(df)
 
-if not df.empty:
-    df.to_csv(output_path, index=False)
-    print(f"Data saved to {output_path}")
+    if not df.empty:
+        df.to_csv(output_path, index=False)
+        print(f"Data saved to {output_path}")
+
+if __name__ == "__main__":
+    scrape_main()
+    print("Scraping completed successfully!")
+    

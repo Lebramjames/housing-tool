@@ -188,36 +188,47 @@ def parse_kamers_badkamers(text):
     return (num_kamers, num_badkamers)
 
 
-date = pd.Timestamp.now().strftime('%Y-%m-%d')
-output_path = f"data/funda_data_{date}.csv"
-df = pd.read_csv(output_path)
-# Apply the function to the 'overdracht_aangeboden_sinds' column
-df['aangeboden_date'] = df['overdracht_aangeboden_sinds'].apply(
-    lambda x: get_aangeboden_date(x, reference_date=pd.Timestamp.today().normalize())
-)
-# Clean 'overdracht_servicekosten' to extract the numeric value as float (EUR/month)
-df['servicekosten_num'] = df['overdracht_servicekosten'].apply(extract_servicekosten)
-df['servicekosten_num']
+def clean_company_scrape():
+    """
+    Clean the scraped data from Funda company page.
+    """
+    # Load the data
 
-df['has_berging'] = (
-    df['listing_data_externe_bergruimte_m2'].notna()
-)
-df['has_balkon'] = (
-    df['listing_data_gebouwgebonden_buitenruimte_m2'].notna()
-)
-df['listing_data_bouwjaar'] = pd.to_numeric(
-    df['listing_data_bouwjaar'], errors='coerce'
-).astype('Int64')  # Use Int64 to allow NaN values
-df[['kadaster_lasten_price', 'kadaster_lasten_year']] = df['kadaster_lasten'].apply(
-    parse_lasten_split
-).apply(pd.Series)
-df['beschikbaar'] = df['overdracht_status'].apply(lambda x: True if str(x).strip().lower() == 'beschikbaar' else False)
+    date = pd.Timestamp.now().strftime('%Y-%m-%d')
+    output_path = f"data/funda_data_{date}.csv"
+    df = pd.read_csv(output_path)
+    # Apply the function to the 'overdracht_aangeboden_sinds' column
+    df['aangeboden_date'] = df['overdracht_aangeboden_sinds'].apply(
+        lambda x: get_aangeboden_date(x, reference_date=pd.Timestamp.today().normalize())
+    )
+    # Clean 'overdracht_servicekosten' to extract the numeric value as float (EUR/month)
+    df['servicekosten_num'] = df['overdracht_servicekosten'].apply(extract_servicekosten)
+    df['servicekosten_num']
 
-df['eigendom_year'] = df['kadaster_eigendomssituatie'].apply(parse_eigendomssituatie_year)
-df['eigendom_year'] = df['eigendom_year'].astype('Int64')  # Use Int64 to allow NaN values
-df['woonlaag_num'] = df['indeling_verdieping'].apply(parse_woonlaag_to_floor)
-df[['num_kamers', 'num_badkamers']] = df['indeling_kamers'].apply(parse_kamers_badkamers).apply(pd.Series).astype('Int64')  # Use Int64 to allow NaN values
-df['woonlagen_num'] = df['indeling_woonlagen'].apply(parse_woonlagen_count).astype('Int64')  
+    df['has_berging'] = (
+        df['listing_data_externe_bergruimte_m2'].notna()
+    )
+    df['has_balkon'] = (
+        df['listing_data_gebouwgebonden_buitenruimte_m2'].notna()
+    )
+    df['listing_data_bouwjaar'] = pd.to_numeric(
+        df['listing_data_bouwjaar'], errors='coerce'
+    ).astype('Int64')  # Use Int64 to allow NaN values
+    df[['kadaster_lasten_price', 'kadaster_lasten_year']] = df['kadaster_lasten'].apply(
+        parse_lasten_split
+    ).apply(pd.Series)
+    df['beschikbaar'] = df['overdracht_status'].apply(lambda x: True if str(x).strip().lower() == 'beschikbaar' else False)
 
-df.to_csv(output_path, index=False)
-print(f"Data cleaned and saved to {output_path}")
+    df['eigendom_year'] = df['kadaster_eigendomssituatie'].apply(parse_eigendomssituatie_year)
+    df['eigendom_year'] = df['eigendom_year'].astype('Int64')  # Use Int64 to allow NaN values
+    df['woonlaag_num'] = df['indeling_verdieping'].apply(parse_woonlaag_to_floor)
+    df[['num_kamers', 'num_badkamers']] = df['indeling_kamers'].apply(parse_kamers_badkamers).apply(pd.Series).astype('Int64')  # Use Int64 to allow NaN values
+    df['woonlagen_num'] = df['indeling_woonlagen'].apply(parse_woonlagen_count).astype('Int64')  
+
+    df.to_csv(output_path, index=False)
+    print(f"Data cleaned and saved to {output_path}")
+
+if __name__ == "__main__":
+    clean_company_scrape()
+    print("Company data cleaning completed successfully!")
+    
