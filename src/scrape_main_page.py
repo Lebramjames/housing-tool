@@ -329,28 +329,28 @@ def scrape_main():
         df = pd.DataFrame()  # <-- move this up before retry loop
         counter = 0
 
-    for page in pages:
-        for attempt in range(max_retries):
-            try:
-                print(f"Processing page {page}, attempt {attempt + 1}...")
-                page_df = get_page_information(page, service=service, options=options)
+        for page in pages:
+            for attempt in range(max_retries):
+                try:
+                    print(f"Processing page {page}, attempt {attempt + 1}...")
+                    page_df = get_page_information(page, service=service, options=options)
 
-                if page_df is not None and not page_df.empty:
-                    logging.info(f"✅ Page {page} processed with {len(page_df)} records.")
-                    df = pd.concat([df, page_df], ignore_index=True)
-                    break  # Exit retry loop if success
-                else:
-                    logging.warning(f"⚠️ Page {page} returned no data on attempt {attempt + 1}.")
-            except Exception as e:
-                logging.error(f"❌ Error processing page {page} on attempt {attempt + 1}: {e}")
-                if attempt == max_retries - 1:
-                    logging.error(f"⛔ Max retries reached for page {page}. Skipping.")
-                    break
+                    if page_df is not None and not page_df.empty:
+                        logging.info(f"✅ Page {page} processed with {len(page_df)} records.")
+                        df = pd.concat([df, page_df], ignore_index=True)
+                        break  # Exit retry loop if success
+                    else:
+                        logging.warning(f"⚠️ Page {page} returned no data on attempt {attempt + 1}.")
+                except Exception as e:
+                    logging.error(f"❌ Error processing page {page} on attempt {attempt + 1}: {e}")
+                    if attempt == max_retries - 1:
+                        logging.error(f"⛔ Max retries reached for page {page}. Skipping.")
+                        break
 
-    df.drop_duplicates(subset=['street_name', 'number'], inplace=True)
-    df.reset_index(drop=True, inplace=True)
-    df = merge_with_existing_geo(df, existing_df)
-    df = add_neighborhood_info(df)
+        df.drop_duplicates(subset=['street_name', 'number'], inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        df = merge_with_existing_geo(df, existing_df)
+        df = add_neighborhood_info(df)
     
     if not df.empty:
         df.to_csv(output_path, index=False)
