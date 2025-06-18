@@ -74,13 +74,19 @@ def get_page_information(page_number, service=None, options=None):
     logging.info(f"Starting to scrape page {page_number}...")
 
     html, soup, json_ld = get_valid_html_versions(page_number, service=service, options=options)
+    # store the html file as txt file with page and date in title: 
+    html_path = f"data/html_page_{page_number}_{pd.Timestamp.now().strftime('%Y%m%d')}.txt"
+    if page_number == 1:
+        if html:
+            with open(html_path, 'w', encoding='utf-8') as f:
+                f.write(html)
+            logging.info(f"HTML content saved to {html_path}")
 
     logging.info("Parsing HTML to find JSON-LD script block...")
     logging.info(f"Total script tags found: {len(soup.find_all('script'))}")
 
     
     json_ld = soup.find('script', {'type': 'application/ld+json'})
-
     logging.info(f"JSON-LD script block found: {json_ld is not None}")
 
     if json_ld is None:
@@ -334,7 +340,7 @@ def scrape_main():
                 try:
                     print(f"Processing page {page}, attempt {attempt + 1}...")
                     page_df = get_page_information(page, service=service, options=options)
-
+                    
                     if page_df is not None and not page_df.empty:
                         logging.info(f"✅ Page {page} processed with {len(page_df)} records.")
                         df = pd.concat([df, page_df], ignore_index=True)

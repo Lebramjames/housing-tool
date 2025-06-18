@@ -7,18 +7,41 @@ import os
 import geopandas as gpd
 import json
 from shapely.geometry import Point
+from datetime import timedelta
 
 # add to the top of the page a title which date it was updated: 
-st.title("Funda Listings in Amsterdam - Updated: " + pd.Timestamp.now().strftime('%Y-%m-%d'))
-# and if it was able to find todays data
-if not os.path.exists(os.path.join(os.getcwd(), 'data', f'funda_data_{pd.Timestamp.now().strftime("%Y-%m-%d")}.csv')):
-    st.warning("No data found for today. Please run the scraper first to update the listings.")
+# --- Find latest available data file ---
+
+st.title("Funda Listings in Amsterdam")
+
+data_dir = os.path.join(os.getcwd(), 'data')
+base_name = 'funda_data_'
+ext = '.csv'
+
+today = pd.Timestamp.now().date()
+max_days_back = 30  # How many days to look back
+
+found_date = None
+for i in range(max_days_back):
+    check_date = today - timedelta(days=i)
+    file_name = f"{base_name}{check_date.strftime('%Y-%m-%d')}{ext}"
+    file_path = os.path.join(data_dir, file_name)
+    if os.path.exists(file_path):
+        found_date = check_date
+        break
+
+if found_date is None:
+    st.error("No data file found in the last 30 days. Please run the scraper to update the listings.")
+    st.stop()
 else:
-    st.success("Data for today found. You can filter the listings below.")
+    st.info(f"Using data from: {found_date.strftime('%Y-%m-%d')}")
+    if found_date == today:
+        st.success("Data for today found. You can filter the listings below.")
+    else:
+        st.warning(f"No data for today. Showing latest available data from {found_date.strftime('%Y-%m-%d')}.")
 
 # --- Load data ---
-today = pd.Timestamp.now().strftime('%Y-%m-%d')
-input_path  = os.path.join(os.getcwd(), 'data', f'funda_data_{today}.csv')
+input_path = os.path.join(data_dir, f"{base_name}{found_date.strftime('%Y-%m-%d')}{ext}")
 df = pd.read_csv(input_path)
 
 # check how many new companies (aangeboden_date = yesterday) are in the data

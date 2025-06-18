@@ -221,6 +221,31 @@ def scrape_company_information(local = False):
     input_path = os.path.join(os.getcwd(), 'data', f'funda_data_{today}.csv')
     df = pd.read_csv(input_path)
 
+    # # Find the latest file available (closest to today, but not after today)
+    # data_dir = os.path.join(os.getcwd(), 'data')
+    # files = [f for f in os.listdir(data_dir) if f.startswith('funda_data_') and f.endswith('.csv')]
+    # if not files:
+    #     raise FileNotFoundError("No funda_data_*.csv files found in the data directory.")
+
+    # today_date = pd.to_datetime(pd.Timestamp.now().strftime('%Y-%m-%d'))
+    # file_dates = []
+    # for f in files:
+    #     try:
+    #         date_str = f.replace('funda_data_', '').replace('.csv', '')
+    #         file_date = pd.to_datetime(date_str, errors='coerce')
+    #         if file_date <= today_date:
+    #             file_dates.append((file_date, f))
+    #     except Exception:
+    #         continue
+    # file_dates = [fd for fd in file_dates if fd[0] is not pd.NaT]
+    # if not file_dates:
+    #     raise FileNotFoundError("No valid dated funda_data_*.csv files found (not after today).")
+
+    # file_dates.sort(reverse=True)
+    # latest_file = file_dates[0][1]
+    # df = pd.read_csv(os.path.join(data_dir, latest_file))
+
+    # # for existing compan
     # df price/m2 sort from low to high
     df.sort_values(by='price/m2', inplace=True)
     df_working = df.copy()
@@ -246,9 +271,9 @@ def scrape_company_information(local = False):
             logging.info(f"Processing row {idx}/{len(df_working)}")
         url = row['url']
 
-        # Skip if already processed
-        if pd.notna(row['indeling_kamers']):
-            continue
+        # # Skip if already processed
+        # if pd.notna(row['indeling_kamers']):
+        #     continue
 
         for attempt in range(3):
             try:
