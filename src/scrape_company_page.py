@@ -175,6 +175,23 @@ def extract_energy_label(html):
                 return span.get_text(strip=True)
     return None
 
+def extract_popularity_data(html):
+    soup = BeautifulSoup(html, 'html.parser')
+    data = {}
+
+    # Locate the popularity section
+    popularity_section = soup.find('section', {'data-testid': 'object-insights'})
+    if popularity_section:
+        # Look for all blur-sm value containers
+        blur_values = popularity_section.find_all('p', class_='blur-sm m-0 font-bold')
+
+        if len(blur_values) >= 2:
+            # The first is views, second is saved count
+            data['bekeken'] = blur_values[0].get_text(strip=True)
+            data['bewaard'] = blur_values[1].get_text(strip=True)
+
+    return data or None
+
 def extract_overdracht_from_json_block(raw_text):
     data = {}
 
@@ -205,6 +222,30 @@ def extract_kadastrale_info_from_flat_html(raw_text):
         "lasten": extract_value("cadastral-fees")
     }
 
+def extract_omschrijving(html):
+    soup = BeautifulSoup(html, 'html.parser')
+    data = {}
+
+    # Find the heading or section that contains "Omschrijving"
+    omschrijving_heading = soup.find(lambda tag: tag.name in ['h2', 'h3', 'h4'] and 'omschrijving' in tag.get_text(strip=True).lower())
+
+    if omschrijving_heading:
+        # Find the next sibling that contains the text
+        content = []
+        next_node = omschrijving_heading.find_next_sibling()
+
+        # Collect all paragraphs or text blocks until a new section starts
+        while next_node and next_node.name not in ['h2', 'h3', 'section']:
+            if next_node.name in ['p', 'div']:
+                content.append(next_node.get_text(strip=True))
+            next_node = next_node.find_next_sibling()
+        
+        if content:
+            data['omschrijving'] = '\n'.join(content)
+            return data
+
+    return None
+
 def get_valid_html_versions(url, service=None, options=None):
 
     html_req = get_html(url)
@@ -221,32 +262,6 @@ def scrape_company_information(local = False):
     input_path = os.path.join(os.getcwd(), 'data', f'funda_data_{today}.csv')
     df = pd.read_csv(input_path)
 
-    # # Find the latest file available (closest to today, but not after today)
-    # data_dir = os.path.join(os.getcwd(), 'data')
-    # files = [f for f in os.listdir(data_dir) if f.startswith('funda_data_') and f.endswith('.csv')]
-    # if not files:
-    #     raise FileNotFoundError("No funda_data_*.csv files found in the data directory.")
-
-    # today_date = pd.to_datetime(pd.Timestamp.now().strftime('%Y-%m-%d'))
-    # file_dates = []
-    # for f in files:
-    #     try:
-    #         date_str = f.replace('funda_data_', '').replace('.csv', '')
-    #         file_date = pd.to_datetime(date_str, errors='coerce')
-    #         if file_date <= today_date:
-    #             file_dates.append((file_date, f))
-    #     except Exception:
-    #         continue
-    # file_dates = [fd for fd in file_dates if fd[0] is not pd.NaT]
-    # if not file_dates:
-    #     raise FileNotFoundError("No valid dated funda_data_*.csv files found (not after today).")
-
-    # file_dates.sort(reverse=True)
-    # latest_file = file_dates[0][1]
-    # df = pd.read_csv(os.path.join(data_dir, latest_file))
-
-    # # for existing compan
-    # df price/m2 sort from low to high
     df.sort_values(by='price/m2', inplace=True)
     df_working = df.copy()
 
@@ -271,15 +286,15 @@ def scrape_company_information(local = False):
             logging.info(f"Processing row {idx}/{len(df_working)}")
         url = row['url']
 
-        # # Skip if already processed
-        # if pd.notna(row['indeling_kamers']):
-        #     continue
 
         for attempt in range(3):
             try:
                 print(f"Attempt {attempt + 1}: {url}")
                 html = get_valid_html_versions(url, service=service, options=options)
-
+                # writh if idx = 1 write html to text: 
+                # if idx == 1:
+                #     with open('test.html', 'w', encoding='utf-8') as f:
+                #         f.write(html)
                 # Extract structured content
                 indeling_info = extract_indeling_info(html)
                 kadaster_info = extract_kadastrale_info_from_flat_html(html)
@@ -287,6 +302,8 @@ def scrape_company_information(local = False):
                 energy_label = extract_energy_label(html)
                 overdracht_info = extract_overdracht_from_json_block(html)
                 surface_info = extract_surface_areas(html)
+                popularity_data = extract_popularity_data(html)
+                omschrijving = extract_omschrijving(html)
 
                 # Combine all extracted data
                 flat_data = {}
@@ -295,7 +312,9 @@ def scrape_company_information(local = False):
                     "kadaster": kadaster_info,
                     "listing_data": listing_data,
                     "overdracht": overdracht_info,
-                    "surface": surface_info
+                    "surface": surface_info,
+                    "popularity": popularity_data,
+                    "buurt": omschrijving
                 }.items():
                     if isinstance(value, dict):
                         for sub_key, sub_value in value.items():
@@ -304,6 +323,11 @@ def scrape_company_information(local = False):
                         flat_data[key] = value
 
                 flat_data["energy_label"] = energy_label
+                
+                # if idx == 1: 
+                #     # save df_working to a csv file
+                #     output_path = os.path.join(os.getcwd(), 'data', f'funda_data_working_{today}.csv')
+                #     df_working.to_csv(output_path, index=False)
 
                 # Update DataFrame
                 for col, val in flat_data.items():
@@ -317,6 +341,7 @@ def scrape_company_information(local = False):
                 if attempt == 2:
                     logging.error(f"⛔ Max retries reached for {url}. Skipping.")
                 continue
+
 
     output_path = os.path.join(os.getcwd(), 'data', f'funda_data_{today}.csv')
     df_working.to_csv(output_path, index=False)

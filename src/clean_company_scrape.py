@@ -187,6 +187,26 @@ def parse_kamers_badkamers(text):
 
     return (num_kamers, num_badkamers)
 
+# popularity_bekeken,popularity_bewaard
+def parse_popularity_data(text):
+    """
+    Parses popularity data from a string.
+    Returns a tuple: (popularity_bekeken, popularity_bewaard)
+    """
+    if pd.isna(text):
+        return (np.nan, np.nan)
+
+    text = str(text).lower()
+
+    # Match "bekeken X keer"
+    bekeken_match = re.search(r'bekeken\s+(\d+)\s+keer', text)
+    popularity_bekeken = int(bekeken_match.group(1)) if bekeken_match else 0
+
+    # Match "bewaard X keer"
+    bewaard_match = re.search(r'bewaard\s+(\d+)\s+keer', text)
+    popularity_bewaard = int(bewaard_match.group(1)) if bewaard_match else 0
+
+    return (popularity_bekeken, popularity_bewaard)
 
 def clean_company_scrape():
     """
@@ -196,6 +216,7 @@ def clean_company_scrape():
 
     date = pd.Timestamp.now().strftime('%Y-%m-%d')
     output_path = f"data/funda_data_{date}.csv"
+    # output_path = f'data/funda_data_working_2025-06-18.csv'
     df = pd.read_csv(output_path)
     # Apply the function to the 'overdracht_aangeboden_sinds' column
     df['aangeboden_date'] = df['overdracht_aangeboden_sinds'].apply(
@@ -223,8 +244,16 @@ def clean_company_scrape():
     df['eigendom_year'] = df['eigendom_year'].astype('Int64')  # Use Int64 to allow NaN values
     df['woonlaag_num'] = df['indeling_verdieping'].apply(parse_woonlaag_to_floor)
     df[['num_kamers', 'num_badkamers']] = df['indeling_kamers'].apply(parse_kamers_badkamers).apply(pd.Series).astype('Int64')  # Use Int64 to allow NaN values
-    df['woonlagen_num'] = df['indeling_woonlagen'].apply(parse_woonlagen_count).astype('Int64')  
+    df['woonlagen_num'] = df['indeling_woonlagen'].apply(parse_woonlagen_count).astype('Int64') 
+    df['bekeken'] = df['popularity_bekeken'].apply(
+        lambda x: int(str(x).replace('.', '').replace('x', '').strip()) if pd.notna(x) else 0
+    )
+    df['bewaard'] = df['popularity_bewaard'].apply(
+        lambda x: int(str(x).replace('.', '').replace('x', '').strip()) if pd.notna(x) else 0
+    )
 
+    # Calculate the ratio of 'bekeken' to 'bewaard', avoiding division by zero and infinite values
+    df['bewaard_bekeken_ratio'] = df['bewaard'] / df['bekeken'].replace({0: np.nan})
     df.to_csv(output_path, index=False)
     print(f"Data cleaned and saved to {output_path}")
 

@@ -1,18 +1,18 @@
+name: Funda Workflow
+
 on:
   push:
     branches:
       - main
 
   schedule:
-    - cron: '0 6 * * *'  # Runs daily at 06:00 UTC
-
-permissions:
-  contents: write  # This is needed to allow pushing to the repo
+    - cron: '0 2 * * *'  # Runs daily at 06:00 UTC
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    env:
+      MY_SECRET: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
