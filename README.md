@@ -3,4 +3,4 @@
 This project reads the Funda website with settings: 
 - Location: Amsterdam, within 2km of Willem de Zwijgerlaan  
 - Price range: €0 - €500,000  
-- Property type: Apartment  
+- Property type: Apartment  w

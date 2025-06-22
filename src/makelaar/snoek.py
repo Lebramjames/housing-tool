@@ -91,4 +91,4 @@ if __name__ == "__main__":
     listings = extract_snoek_data(html)
     for listing in listings:
         print(listing)
-    url_format ='https://www.deherenvansnoek.nl/woningaanbod/koop/amsterdam?locationofinterest=Amsterdam&moveunavailablelistingstothebottom=true&orderdescending=true&skip=1{page}'
+    url_format ='https://www.deherenvansnoek.nl/woningaanbod/koop/amsterdam?locationofinterest=Amsterdam&moveunavailablelistingstothebottom=true&orderdescending=true&skip={page}'
