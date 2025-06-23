@@ -1,6 +1,13 @@
 # %%
+# Description output: 
+# Balkon richting e.g. zuidwest
+# Renovatie nodig, subcategorieën: keuken, badkamer, volledig huis
 
 
+
+
+
+# %%
 # we iterate over the 
 
 from pydantic import BaseModel, Field

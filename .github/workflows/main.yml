@@ -29,10 +29,13 @@ jobs:
         run: python src/run_scraper.py
 
       - name: Commit and push results
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git config --global user.name 'Funda Bot'
+          git config --global user.email 'funda-bot@example.com'
+          git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}
           git add data/*.csv
           git add data/*.txt
           git commit -m "🗓️ Daily Funda scrape - $(date +'%Y-%m-%d')" || echo "No changes to commit"
-          git push
+          git push origin main

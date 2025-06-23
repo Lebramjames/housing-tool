@@ -1,0 +1,53 @@
+{
+  "todo": [
+    {
+      "assignedTo": {
+        "name": "Bram Griffioen"
+      },
+      "creation_time": "2025-06-22T18:20:59.364Z",
+      "id": "1",
+      "references": [],
+      "title": "OpenAi Description processor",
+      "details": {
+        "content": "[ ] test\t\t\t ",
+        "mime": "text/markdown"
+      }
+    }
+  ],
+  "in-progress": [
+    {
+      "assignedTo": {
+        "name": "Bram Griffioen"
+      },
+      "creation_time": "2025-06-22T18:23:19.346Z",
+      "id": "4",
+      "prio": 3,
+      "references": [],
+      "title": "Funda - Scraper"
+    },
+    {
+      "assignedTo": {
+        "name": "Bram Griffioen"
+      },
+      "category": "scraper",
+      "creation_time": "2025-06-22T18:21:27.319Z",
+      "id": "2",
+      "prio": 2,
+      "references": [],
+      "title": "Makelaar - Scraper"
+    },
+    {
+      "assignedTo": {
+        "name": "Bram Griffioen"
+      },
+      "category": "scraper",
+      "creation_time": "2025-06-22T18:24:11.486Z",
+      "id": "5",
+      "prio": 1,
+      "references": [],
+      "title": "Rental - Scraper"
+    }
+  ],
+  "testing": [],
+  "done": []
+}

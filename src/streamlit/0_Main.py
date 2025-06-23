@@ -8,6 +8,8 @@ import geopandas as gpd
 import json
 from shapely.geometry import Point
 from datetime import timedelta
+import plotly.express as px
+import streamlit.components.v1 as components
 
 # add to the top of the page a title which date it was updated: 
 # --- Find latest available data file ---
@@ -16,7 +18,7 @@ st.title("Funda Listings in Amsterdam")
 
 def load_data():
 
-    data_dir = os.path.join(os.getcwd(), 'data')
+    data_dir = os.path.join(os.getcwd(), 'data', 'funda')
     base_name = 'funda_data_'
     ext = '.csv'
 
@@ -36,11 +38,10 @@ def load_data():
         st.error("No data file found in the last 30 days. Please run the scraper to update the listings.")
         st.stop()
     else:
-        st.info(f"Using data from: {found_date.strftime('%Y-%m-%d')}")
         if found_date == today:
-            st.success("Data for today found. You can filter the listings below.")
+            st.success(f"Using data from: {found_date.strftime('%Y-%m-%d')}, Data for today found. You can filter the listings below.")
         else:
-            st.warning(f"No data for today. Showing latest available data from {found_date.strftime('%Y-%m-%d')}.")
+            st.warning(f"Using data from: {found_date.strftime('%Y-%m-%d')}, No data for today. Showing latest available data from {found_date.strftime('%Y-%m-%d')}.")
 
     # --- Load data ---
     input_path = os.path.join(data_dir, f"{base_name}{found_date.strftime('%Y-%m-%d')}{ext}")
@@ -48,8 +49,8 @@ def load_data():
     df['aangeboden_date'] = pd.to_datetime(df['aangeboden_date'])  # Ensure datetime type
     last_week = df[df['aangeboden_date'] >= pd.Timestamp.now() - pd.Timedelta(days=7)]
     # number of new listings this week: 
-    new_listings_count = len(last_week)
-    st.success(f"New listings this week: {new_listings_count}")
+    # new_listings_count = len(last_week)
+    # st.success(f"New listings this week: {new_listings_count}")
 
     return df
 
@@ -74,220 +75,60 @@ df['price_per_m2'] = df['price'] / df['area']
 df['label'] = df['street_name'] + ' ' + df['number']
 
 # --- Filters ---
-def side_bar_filters():
-    st.sidebar.header("Filters")
-    st.sidebar.markdown("Use the filters below to narrow down the listings.")
+from src.streamlit.side_bar import side_bar_filters
 
-    min_val, max_val = int(df['price_per_m2'].min()), int(df['price_per_m2'].max())
-    area_min, area_max = int(df['area'].min()), int(df['area'].max())
-    price_min, price_max = int(df['price'].min()), int(df['price'].max())
+filtered_df, selected_range = side_bar_filters(df)
 
+def figure_map():
+    map_df = filtered_df.dropna(subset=["lat", "lon"]).copy()
+    map_df['price'] = pd.to_numeric(map_df['price'], errors='coerce')
+    map_df['area'] = pd.to_numeric(map_df['area'], errors='coerce')
+    map_df['price_per_m2'] = (map_df['price'] / map_df['area']).round(0)
+    map_df['price_per_m2_str'] = map_df['price_per_m2'].astype(int).astype(str)
+    map_df['price_str'] = map_df['price'].astype(int).astype(str)
+    map_df['area_str'] = map_df['area'].astype(int).astype(str)
 
+    # Add color scale based on price_per_m2
+    min_val = map_df['price_per_m2'].min()
+    max_val = map_df['price_per_m2'].max()
 
-    with st.sidebar:
-        filter_beschikbaar = st.checkbox("✅ Only available listings", value=True)
-
-# --- Filters with default values ---
-area_range = st.slider(
-    "📐 Filter by area (m²)",
-    area_min,
-    area_max,
-    (max(area_min, 50), area_max)  # Default from 50 to max
-)
-price_range = st.slider(
-    "💰 Filter by price (€)",
-    price_min,
-    price_max,
-    (max(price_min, 250000), min(price_max, 450000))  # Default from 250k to 450k
-)
-selected_range = st.slider(
-    "💸 Filter by price per m²",
-    min_val,
-    max_val,
-    (min_val, min(max_val, 10000))  # Default up to 10,000 €/m²
-)
-
-filter_berging = st.checkbox("🧱 Only listings with berging (storage)", value=True)
-
-# Servicekosten filter (< 100 or NaN)
-filter_servicekosten = st.checkbox("💡 Servicekosten < €100 or missing", value=False)
-
-# Kadaster ground rent (< 100 EUR)
-filter_kadaster_lasten = st.checkbox("📜 Kadaster lasten < €100", value=False)
-
-# Eigendom after 2035
-filter_eigendom = st.checkbox("🏠 Erfpacht/eigendomjaar after 2035", value=False)
-
-# Min rooms
-min_kamers = st.slider("🛏️ Minimum number of rooms", min_value=0, max_value=int(df['num_kamers'].max()), value=0)
-
-# Max woonlagen
-max_woonlagen = st.slider("🏢 Max number of woonlagen", min_value=1, max_value=int(df['woonlagen_num'].max()), value=2)
-
-# Date slider
-# Ensure 'aangeboden_date' is datetime type for filtering
-df['aangeboden_date'] = pd.to_datetime(df['aangeboden_date'])
-
-min_date = df['aangeboden_date'].min().date()
-max_date = df['aangeboden_date'].max().date()
-
-# Streamlit date slider
-date_range = st.slider(
-    "📆 Aangeboden tussen",
-    min_value=min_date,
-    max_value=max_date,
-    value=(min_date, max_date),
-    format="DD-MM-YYYY"
-)
-
-# Convert date_range to pandas.Timestamp for comparison
-date_range = (pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1]))
-
-
-regions_available = sorted(str(x) for x in df["neighborhood"].dropna().unique())
-# Pre-select specific neighborhoods if present
-preselect = [
-    "Baarsjes", 
-    "Erasmusbuurt", 
-    "Staatsliedenbuurt", 
-    "Bos en Lommer",
-    'Unknown',
-    'Spaarndammerbuurt',
-    'Postjesweg',
-]
-default_regions = [r for r in regions_available if r.lower() in [x.lower() for x in preselect]]
-# --- Neighborhood multiselect with "Select All" button ---
-# --- Neighborhood multiselect with "Select All/Unselect All" toggle ---
-if "all_selected" not in st.session_state:
-    st.session_state["all_selected"] = False
-
-def toggle_select_all():
-    st.session_state["all_selected"] = not st.session_state["all_selected"]
-
-select_all = st.button(
-    "Select All Neighborhoods" if not st.session_state["all_selected"] else "Unselect All Neighborhoods",
-    on_click=toggle_select_all
-)
-
-selected_regions = st.multiselect(
-    "🗺️ Filter by neighborhood",
-    regions_available,
-    default=regions_available if st.session_state["all_selected"] else default_regions if default_regions else [],
-    key="neigh_multiselect"
-)
-
-
-filtered_df = df[
-    ((df['price_per_m2'] >= selected_range[0]) & (df['price_per_m2'] <= selected_range[1]) | (df['price_per_m2'].isna())) &
-    ((df['area'] >= area_range[0]) & (df['area'] <= area_range[1]) | (df['area'].isna())) &
-    ((df['price'] >= price_range[0]) & (df['price'] <= price_range[1]) | (df['price'].isna())) &
-    ((df['neighborhood'].isin(selected_regions)) if selected_regions else True)
-]
-
-
-if filter_berging:
-    filtered_df = filtered_df[filtered_df['has_berging'] == True]
-
-if filter_servicekosten:
-    filtered_df = filtered_df[
-        (filtered_df['servicekosten_num'] < 100) | (filtered_df['servicekosten_num'].isna())
-    ]
-
-if filter_beschikbaar:
-    filtered_df = filtered_df[filtered_df['beschikbaar'] == True]
-    
-if filter_kadaster_lasten:
-    filtered_df = filtered_df[
-        (filtered_df['kadaster_lasten_price'] < 100) | (filtered_df['kadaster_lasten_price'].isna())
-    ]
-
-if filter_eigendom:
-    filtered_df = filtered_df[filtered_df['eigendom_year'] > 2035]
-
-filtered_df = filtered_df[
-    ((filtered_df['num_kamers'] > min_kamers) | (filtered_df['num_kamers'].isna())) &
-    ((filtered_df['woonlagen_num'] < max_woonlagen) | (filtered_df['woonlagen_num'].isna())) &
-    ((filtered_df['aangeboden_date'] >= date_range[0]) & (filtered_df['aangeboden_date'] <= date_range[1]))
-]
-
-
-
-map_df = filtered_df.dropna(subset=["lat", "lon"])
-map_df = map_df.copy()
-map_df['price'] = pd.to_numeric(map_df['price'], errors='coerce')
-map_df['area'] = pd.to_numeric(map_df['area'], errors='coerce')
-map_df['price_per_m2'] = (map_df['price'] / map_df['area']).round(0)
-map_df['price_per_m2_str'] = map_df['price_per_m2'].astype(int).astype(str)
-map_df['price_str'] = map_df['price'].astype(int).astype(str)
-map_df['area_str'] = map_df['area'].astype(int).astype(str)
-
-# --- Show DataFrame ---
-st.write("📄 Filtered Listings")
-# Show DataFrame with clickable URLs
-def make_clickable(val):
-    return f'<a href="{val}" target="_blank">Link</a>'
-
-
-display_df = filtered_df[
-    [
-        "label",
-        "url",
-        "price_per_m2",
-        "num_kamers",
-        "price",
-        "area",
-        "neighborhood",
-        "has_berging",
-        "aangeboden_date",
-        "servicekosten_num",
-        'energy_label',
-        "eigendom_year",
-        "woonlagen_num",
-        "beschikbaar",
-    ]
-].rename(columns={
-    "label": "full_address",
-    "price_per_m2": "price/m2",
-    "aangeboden_date": "aangeboden sinds",
-    "servicekosten_num": "service_kosten_num",
-    "woonlagen_num": "woonlaag_num"
-}).copy()
-
-# Round price/m2 to 0 decimals
-display_df["price/m2"] = display_df["price/m2"].round(0).astype(int)
-
-display_df["url"] = display_df["url"].apply(make_clickable)
-
-# Show the table without centering
-st.write(display_df.to_html(escape=False, index=False), unsafe_allow_html=True)
-
-# --- Plot map with gradient ---
-if not map_df.empty:
-    st.write("🗺️ Interactive Map (hover address, color by price/m²)")
-
-    # Normalize price per m² to color scale (blue to red)
-    def scale_color(val, vmin, vmax):
-        ratio = (val - vmin) / (vmax - vmin)
+    def scale_color(val):
+        ratio = (val - min_val) / (max_val - min_val) if max_val > min_val else 0.5
         r = int(255 * ratio)
         b = 255 - r
         return [r, 100, b, 180]
 
-    color_data = [
-        scale_color(val, selected_range[0], selected_range[1])
-        for val in map_df['price_per_m2']
-    ]
-    map_df = map_df.copy()
-    map_df['color'] = color_data
+    map_df['color'] = map_df['price_per_m2'].apply(scale_color)
 
-    tooltip = {
-        "html": """
-            <b>{label}</b><br/>
-            €{price_str} - {area_str} m²<br/>
-            <b>€{price_per_m2_str}/m²</b>
-        """,
-        "style": {"backgroundColor": "black", "color": "white"}
-    }
-    # Add polygon layer to map for context
+    # Table for display
+    def make_clickable(val):
+        return f'<a href="{val}" target="_blank">Link</a>'
+
+    display_df = filtered_df[
+        [
+            "label", "url", "price_per_m2", "num_kamers", "price", "area", "neighborhood",
+            "has_berging", "aangeboden_date", "servicekosten_num", "energy_label",
+            "eigendom_year", "woonlagen_num", "beschikbaar",
+        ]
+    ].rename(columns={
+        "label": "full_address",
+        "price_per_m2": "price/m2",
+        "aangeboden_date": "aangeboden sinds",
+        "servicekosten_num": "service_kosten_num",
+        "woonlagen_num": "woonlaag_num"
+    }).copy()
+
+    display_df["price/m2"] = display_df["price/m2"].round(0).astype(int)
+    display_df["url"] = display_df["url"].apply(make_clickable)
+
+    return map_df, display_df
+
+map_df, display_df = figure_map()
+
+# --- Scatter plot: price vs area ---
+col1, col2 = st.columns([3, 2])
+
+with col1:
     region_layer = pdk.Layer(
         "GeoJsonLayer",
         geojson_data,
@@ -310,6 +151,16 @@ if not map_df.empty:
         )
     ]
 
+    tooltip = {
+        "html": """
+            <b>{label}</b><br/>
+            €{price_str} - {area_str} m²<br/>
+            <b>€{price_per_m2_str}/m²</b>
+        """,
+        "style": {"backgroundColor": "black", "color": "white"}
+    }
+
+    st.write("🗺️ Interactive Map (hover address, color by price/m²)")
     st.pydeck_chart(pdk.Deck(
         initial_view_state=pdk.ViewState(
             latitude=map_df["lat"].mean(),
@@ -319,6 +170,7 @@ if not map_df.empty:
         ),
         tooltip=tooltip,
         layers=[
+            region_layer,
             pdk.Layer(
                 "ScatterplotLayer",
                 data=map_df,
@@ -329,13 +181,53 @@ if not map_df.empty:
             )
         ]
     ))
-    pdk.Layer("ScatterplotLayer", data=map_df, get_position='[lon, lat]', get_radius=120, get_fill_color='color', pickable=True)
-    pdk.Layer("HeatmapLayer", data=map_df, get_position='[lon, lat]', get_weight='price_per_m2', radius_pixels=50)
+
+    with col2:
+        st.write("📊 Price vs Area (click dot to open listing)")
+        fig = px.scatter(
+            map_df,
+            x="area",
+            y="price",
+            hover_name="label",
+            hover_data={"price": True, "area": True, "price_per_m2": True, "neighborhood": True},
+            custom_data=["url"],  # For click behavior
+            labels={"price": "Price (€)", "area": "Area (m²)"},
+            height=450,
+        )
+
+        fig.update_traces(marker=dict(size=10, color="orange"))
+
+        fig.update_layout(clickmode='event+select')
+
+        # Display Plotly chart
+        scatter_click = st.plotly_chart(fig, use_container_width=True)
+
+        # JavaScript for opening URL on click
+        components.html("""
+        <script>
+        const streamlitEvents = window.streamlitEvents || [];
+
+        document.addEventListener('plotly_click', function(e) {
+            const url = e.detail.points[0].customdata[0];
+            window.open(url, '_blank');
+        });
+
+        streamlitEvents.push({
+            event: 'plotly_click',
+            handler: function(e) {
+                const url = e.points[0].customdata[0];
+                window.open(url, '_blank');
+            }
+        });
+
+        window.streamlitEvents = streamlitEvents;
+        </script>
+        """, height=0)
 
 
-    # --- Clickable links below map ---
-    st.markdown("### 🔗 Listings")
-    for _, row in map_df.sort_values("price_per_m2").iterrows():
-        st.markdown(f"- [{row['label']} - €{int(row['price'])} ({int(row['price_per_m2'])}/m²)]({row['url']})")
-else:
-    st.warning("No listings match your filter.")
+st.write(display_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+
+# --- Clickable links below map ---
+st.markdown("### 🔗 Listings")
+for _, row in map_df.sort_values("price_per_m2").iterrows():
+    st.markdown(f"- [{row['label']} - €{int(row['price'])} ({int(row['price_per_m2'])}/m²)]({row['url']})")
