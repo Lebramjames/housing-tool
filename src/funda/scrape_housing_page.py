@@ -21,6 +21,8 @@ from selenium.webdriver.edge.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
 
+from src.funda.clean_company_scrape import clean_company_scrape
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def get_html(url):
@@ -40,7 +42,6 @@ def get_html_without_cookie(url, service=None, options=None):
     html = driver.page_source
     driver.quit()
     return html
-    
     
 
 def extract_indeling_info(html):
@@ -259,7 +260,8 @@ def get_valid_html_versions(url, service=None, options=None):
 
 def scrape_company_information(local = False):
     today = pd.Timestamp.now().strftime('%Y-%m-%d')
-    input_path = os.path.join(os.getcwd(), 'data', f'funda_data_{today}.csv')
+
+    input_path = os.path.join(os.getcwd(), 'data', "raw", f'raw_funda_main_data_{today}.csv')
     df = pd.read_csv(input_path)
 
     df.sort_values(by='price/m2', inplace=True)
@@ -347,6 +349,15 @@ def scrape_company_information(local = False):
     df_working.to_csv(output_path, index=False)
     logging.info(f"🔄 Saved output to {output_path}")
 
-if __name__ == "__main__":
+def run_housing_scrape_pipeline():
+    """
+    Main function to run the housing scrape pipeline.
+    """
+    logging.info("Starting housing scrape pipeline...")
     scrape_company_information(local=True)  # Set to True for local testing, False for production use
+    logging.info("Housing scrape pipeline completed successfully.")
+    clean_company_scrape()  # Assuming this function is defined in another module
+
+if __name__ == "__main__":
+    run_housing_scrape_pipeline()  # Set to True for local testing, False for production use
     logging.info("Scraping completed successfully.")

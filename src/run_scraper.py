@@ -1,11 +1,11 @@
 # %%
 try:
     from src.funda import scrape_main_page
-    from src.funda import scrape_company_page
+    from funda import scrape_housing_page
     from src.funda import clean_company_scrape
 except ImportError:
     from funda import scrape_main_page
-    from funda import scrape_company_page
+    from funda import scrape_housing_page
     from funda import clean_company_scrape
 
 import logging
@@ -21,7 +21,7 @@ def run_funda_scraper():
     logging.info("Starting the Funda scraper...")
     scrape_main_page.scrape_main()
     logging.info("Scraping main page completed.")
-    scrape_company_page.scrape_company_information()
+    scrape_housing_page.scrape_company_information()
     logging.info("Scraping company page completed.")
     clean_company_scrape.clean_company_scrape()
 

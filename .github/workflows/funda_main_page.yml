@@ -1,4 +1,4 @@
-name: Funda Workflow
+name: Funda Main Page Scraper
 
 on:
   push:
@@ -26,16 +26,16 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run scraper
-        run: python src/run_scraper.py
+        run: python src/funda/scrape_main_page.py
 
       - name: Commit and push results
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          git config --global user.name 'Funda Bot'
-          git config --global user.email 'funda-bot@example.com'
+          git config --global user.name 'Lebramjames'
+          git config --global user.email 'bramgriffioen98@gmail.com'
           git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}
           git add data/*.csv
           git add data/*.txt
-          git commit -m "🗓️ Daily Funda scrape - $(date +'%Y-%m-%d')" || echo "No changes to commit"
+          git commit -m "🗓️ Daily Funda Main Page scrape - $(date +'%Y-%m-%d')" || echo "No changes to commit"
           git push origin main

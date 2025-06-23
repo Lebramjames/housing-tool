@@ -216,6 +216,7 @@ def clean_company_scrape():
 
     date = pd.Timestamp.now().strftime('%Y-%m-%d')
     output_path = f"data/funda_data_{date}.csv"
+    input_path = os.path.join('data', f'raw_funda_housing_data_{date}.csv')
     # output_path = f'data/funda_data_working_2025-06-18.csv'
     df = pd.read_csv(output_path)
     # Apply the function to the 'overdracht_aangeboden_sinds' column
