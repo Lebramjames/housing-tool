@@ -8,9 +8,7 @@ GOOGLE_KEY = os.getenv("GOOGLE_KEY")
 
 import pandas as pd
 import os
-import json
 from pathlib import Path
-from shapely.geometry import Point, Polygon
 
 # Load preference geojson
 current_dir = Path(__file__).resolve().parent
@@ -22,7 +20,10 @@ def create_vbt_body():
     df = pd.read_csv(data_path, sep=',')
     # filter: is_available:
     df = df[df['is_available'] == True]
-    df = df[df['preference'] == True]
+
+    # if preference in columns: 
+    if 'preference' in df.columns:
+        df = df[df['preference'] == True]
 
     # sort number_of_responses
     df = df.sort_values(by='number_of_responses', ascending=True)
@@ -31,7 +32,8 @@ def create_vbt_body():
 
     df['link'] = base_url +  df['detail_url'] 
     df['price_per_m2'] = df['price_per_month'] / df['surface_area_m2']
-
+    # Filter out rows with NaN in any of the relevant columns
+    df = df.dropna(subset=['address', 'price_per_month', 'surface_area_m2', 'price_per_m2', 'number_of_responses', 'link'])
     def create_email_body(df, max_rows=10):
         df = df.head(max_rows).copy()
         df['price_per_m2'] = df['price_per_m2'].round(2)
@@ -77,6 +79,12 @@ def create_bouwinvest_body():
 
 def send_gmail(to_email, subject, body, gmail_user, app_password = GOOGLE_KEY):
     msg = MIMEMultipart()
+# def send_gmail(to_email, subject, body, gmail_user, app_password = GOOGLE_KEY):
+    if not app_password:
+        print("❌ Error: GOOGLE_KEY environment variable is not set.")
+        return
+
+    msg = MIMEMultipart()
     msg['From'] = gmail_user
     msg['To'] = to_email
     msg['Subject'] = subject
@@ -91,9 +99,7 @@ def send_gmail(to_email, subject, body, gmail_user, app_password = GOOGLE_KEY):
         print("✅ Email sent successfully")
     except Exception as e:
         print(f"❌ Error sending email: {e}")
-
-
-def run_pipeline(rental_company='bouwinvest'):
+def run_pipeline(rental_company='vbt_huren'):
 
     body_dict = {
         'vbt_huren': create_vbt_body,
@@ -103,7 +109,8 @@ def run_pipeline(rental_company='bouwinvest'):
 
     body = body_dict.get(rental_company, create_vbt_body)()
 
-    to_email = 'bramgriffioen98@gmail.com, rianne.boon@hotmail.com'
+    # to_email = 'bramgriffioen98@gmail.com, rianne.boon@hotmail.com'
+    to_email = 'bramgriffioen98@gmail.com'
 
     subject_dict = {
         'vbt_huren': 'Dagelijkse VBT Verhuur Makelaars Huren Update',

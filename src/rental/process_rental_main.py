@@ -13,7 +13,6 @@ import vbt_huren
 import bouwinvest
 
 import send_email
-
 def process_rental_main():
 
     vbt_huren.run_pipeline()
