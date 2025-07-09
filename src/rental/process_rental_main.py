@@ -6,3 +6,13 @@
 # https://www.wonenbijbouwinvest.nl/huuraanbod?query=Amsterdam&page=1&price=&range=5&type=appartement&availability=&orientation=&sleepingrooms=&surface=&seniorservice=false
 # https://directwonen.nl/huurwoningen-huren/amsterdam
 
+from src.rental import vbt_huren
+
+def process_rental_main():
+
+    vbt_huren.run_pipeline()
+
+if __name__ == "__main__":
+    process_rental_main()
+    
+

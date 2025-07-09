@@ -46,6 +46,10 @@ def load_data():
     # --- Load data ---
     input_path = os.path.join(data_dir, f"{base_name}{found_date.strftime('%Y-%m-%d')}{ext}")
     df = pd.read_csv(input_path)
+    # overdracht_aangeboden_sinds to aangeboden_date
+    df.rename(columns={'overdracht_aangeboden_sinds': 'aangeboden_date'}, inplace=True)
+
+    st.write(f"Data loaded from: {df.columns.tolist()}")
     df['aangeboden_date'] = pd.to_datetime(df['aangeboden_date'])  # Ensure datetime type
     last_week = df[df['aangeboden_date'] >= pd.Timestamp.now() - pd.Timedelta(days=7)]
     # number of new listings this week: 
@@ -182,47 +186,48 @@ with col1:
         ]
     ))
 
-    with col2:
-        st.write("📊 Price vs Area (click dot to open listing)")
-        fig = px.scatter(
-            map_df,
-            x="area",
-            y="price",
-            hover_name="label",
-            hover_data={"price": True, "area": True, "price_per_m2": True, "neighborhood": True},
-            custom_data=["url"],  # For click behavior
-            labels={"price": "Price (€)", "area": "Area (m²)"},
-            height=450,
-        )
 
-        fig.update_traces(marker=dict(size=10, color="orange"))
+with col2:
+    st.write("📊 Price vs Area (click dot to open listing)")
+    fig = px.scatter(
+        map_df,
+        x="area",
+        y="price",
+        hover_name="label",
+        hover_data={"price": True, "area": True, "price_per_m2": True},
+        custom_data=["url"],  # For click behavior
+        labels={"price": "Price (€)", "area": "Area (m²)"},
+        height=450,
+    )
 
-        fig.update_layout(clickmode='event+select')
+    fig.update_traces(marker=dict(size=10, color="orange"))
 
-        # Display Plotly chart
-        scatter_click = st.plotly_chart(fig, use_container_width=True)
+    fig.update_layout(clickmode='event+select')
 
-        # JavaScript for opening URL on click
-        components.html("""
-        <script>
-        const streamlitEvents = window.streamlitEvents || [];
+    # Display Plotly chart
+    scatter_click = st.plotly_chart(fig, use_container_width=True)
 
-        document.addEventListener('plotly_click', function(e) {
-            const url = e.detail.points[0].customdata[0];
+    # JavaScript for opening URL on click
+    components.html("""
+    <script>
+    const streamlitEvents = window.streamlitEvents || [];
+
+    document.addEventListener('plotly_click', function(e) {
+        const url = e.detail.points[0].customdata[0];
+        window.open(url, '_blank');
+    });
+
+    streamlitEvents.push({
+        event: 'plotly_click',
+        handler: function(e) {
+            const url = e.points[0].customdata[0];
             window.open(url, '_blank');
-        });
+        }
+    });
 
-        streamlitEvents.push({
-            event: 'plotly_click',
-            handler: function(e) {
-                const url = e.points[0].customdata[0];
-                window.open(url, '_blank');
-            }
-        });
-
-        window.streamlitEvents = streamlitEvents;
-        </script>
-        """, height=0)
+    window.streamlitEvents = streamlitEvents;
+    </script>
+    """, height=0)
 
 
 st.write(display_df.to_html(escape=False, index=False), unsafe_allow_html=True)

@@ -16,6 +16,9 @@ def side_bar_filters(df):
 
         filter_beschikbaar = st.checkbox("✅ Only available listings", value=True)
 
+        # filter_source including makelaar data or not (make default funda and both, if True then also include makelaar)
+        filter_source = st.checkbox("🔗 Include listings from makelaars", value=True)
+
     # --- Filters with default values ---
         area_range = st.slider(
             "📐 Filter by area (m²)",
@@ -48,10 +51,10 @@ def side_bar_filters(df):
         filter_eigendom = st.checkbox(f"Filter eigendomjaar > {eigendom_year_threshold}", value=False)
 
         # Min rooms
-        min_kamers = st.slider("🛏️ Minimum number of rooms", min_value=0, max_value=int(df['num_kamers'].max()), value=0)
+        # min_kamers = st.slider("🛏️ Minimum number of rooms", min_value=0, max_value=int(df['num_kamers'].max()), value=0)
 
         # Max woonlagen
-        max_woonlagen = st.slider("🏢 Max number of woonlagen", min_value=1, max_value=int(df['woonlagen_num'].max()), value=2)
+        # max_woonlagen = st.slider("🏢 Max number of woonlagen", min_value=1, max_value=int(df['woonlagen_num'].max()), value=2)
 
         # Date slider
         # Ensure 'aangeboden_date' is datetime type for filtering
@@ -60,17 +63,17 @@ def side_bar_filters(df):
         min_date = df['aangeboden_date'].min().date()
         max_date = df['aangeboden_date'].max().date()
 
-        # Streamlit date slider
-        date_range = st.slider(
-            "📆 Aangeboden tussen",
-            min_value=min_date,
-            max_value=max_date,
-            value=(min_date, max_date),
-            format="DD-MM-YYYY"
-        )
+        # # Streamlit date slider
+        # date_range = st.slider(
+        #     "📆 Aangeboden tussen",
+        #     min_value=min_date,
+        #     max_value=max_date,
+        #     value=(min_date, max_date),
+        #     format="DD-MM-YYYY"
+        # )
 
         # Convert date_range to pandas.Timestamp for comparison
-        date_range = (pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1]))
+        # date_range = (pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1]))
 
 
         regions_available = sorted(str(x) for x in df["neighborhood"].dropna().unique())
@@ -114,6 +117,17 @@ def side_bar_filters(df):
         ((df['neighborhood'].isin(selected_regions)) if selected_regions else True)
     ]
 
+    # external_storage_space_m2 if >0 make has_berging True
+    filtered_df['has_berging'] = filtered_df['external_storage_space_m2'].apply(lambda x: x > 0 if pd.notna(x) else False)
+
+    # if acceptance or status is beschikbaar than make beschikbaar True
+    filtered_df['beschikbaar'] = filtered_df.apply(
+        lambda row: (
+            (str(row['acceptance']).lower() == 'beschikbaar' if pd.notna(row['acceptance']) else False) or
+            (str(row['status']).lower() == 'beschikbaar' if pd.notna(row['status']) else False)
+        ),
+        axis=1
+    )
 
     if filter_berging:
         filtered_df = filtered_df[filtered_df['has_berging'] == True]
@@ -122,10 +136,14 @@ def side_bar_filters(df):
         filtered_df = filtered_df[
             (filtered_df['servicekosten_num'] < 100) | (filtered_df['servicekosten_num'].isna())
         ]
+    
 
     if filter_beschikbaar:
         filtered_df = filtered_df[filtered_df['beschikbaar'] == True]
-        
+    if filter_source:
+        filtered_df = filtered_df[filtered_df['source'].isin(['funda', 'makelaar', 'both'])]
+    else:
+        filtered_df = filtered_df[filtered_df['source'].isin(['funda', 'both'])]
     if filter_kadaster_lasten:
         filtered_df = filtered_df[
             (filtered_df['kadaster_lasten_price'] < 100) | (filtered_df['kadaster_lasten_price'].isna())
@@ -134,9 +152,9 @@ def side_bar_filters(df):
     if filter_eigendom:
         filtered_df = filtered_df[filtered_df['eigendom_year'] > 2035]
 
-    filtered_df = filtered_df[
-        ((filtered_df['num_kamers'] > min_kamers) | (filtered_df['num_kamers'].isna())) &
-        ((filtered_df['woonlagen_num'] < max_woonlagen) | (filtered_df['woonlagen_num'].isna())) &
-        ((filtered_df['aangeboden_date'] >= date_range[0]) & (filtered_df['aangeboden_date'] <= date_range[1]))
-    ]
+    # filtered_df = filtered_df[
+    #     # ((filtered_df['num_kamers'] > min_kamers) | (filtered_df['num_kamers'].isna())) &
+    #     # ((filtered_df['woonlagen_num'] < max_woonlagen) | (filtered_df['woonlagen_num'].isna())) &
+    #     ((filtered_df['aangeboden_date'] >= date_range[0]) & (filtered_df['aangeboden_date'] <= date_range[1]))
+    # ]
     return filtered_df, selected_range

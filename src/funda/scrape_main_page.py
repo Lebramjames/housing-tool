@@ -14,6 +14,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 pages = np.arange(1, 100)  # Adjust range for more pages if needed
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+MICROSOFT_DRIVER = r"C:\Users\bgriffioen\OneDrive - STX Commodities B.V\Desktop\funda-project\funda-tool\src\utils\msedgedriver.exe"
+
 def get_html(url):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
@@ -285,8 +287,14 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-def get_html_without_cookie(url, service=None, options=None):
-    driver = webdriver.Chrome(service=service, options=options)
+def get_html_without_cookie(url, service=None, options=None, local=False):
+
+    if local ==True:
+        driver = webdriver.Edge(executable_path=MICROSOFT_DRIVER, options=options)
+        # make sure it is pageless 
+        
+    else:
+        driver = webdriver.Chrome(service=service, options=options)
 
     driver.get(url)
     html = driver.page_source
@@ -296,23 +304,43 @@ def get_html_without_cookie(url, service=None, options=None):
 
 import os
 from datetime import timedelta
+import glob
 
-def scrape_main():
+def scrape_main(local = False):
+    if local == True:
+        from selenium.webdriver.edge.options import Options as EdgeOptions
+        from selenium.webdriver.edge.service import Service as EdgeService
 
-    service = Service(ChromeDriverManager().install())
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
-
+        service = EdgeService(MICROSOFT_DRIVER)
+        options = EdgeOptions()
+        options.use_chromium = True
+        options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
+    else:
+        service = Service(ChromeDriverManager().install())
+        options = Options()
+        options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
 
     date = pd.Timestamp.now().strftime('%Y-%m-%d')
-    output_path = f"data/raw/raw_funda_main_data_{date}.csv"
+    output_path = f"data/funda/raw/raw_funda_main_data_{date}.csv"
 
-    yesterday = (pd.Timestamp.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-    yesterday_path = f"data/funda_data_{yesterday}.csv"
-    existing_df = pd.read_csv(yesterday_path) if os.path.exists(yesterday_path) else pd.DataFrame()
+    # Retrieve all CSV files in the directory and append, dropping duplicates
+
+    data_dir = "data/funda"
+    all_files = glob.glob(os.path.join(data_dir, "funda_data_*.csv"))
+    if all_files:
+        df_list = [pd.read_csv(f) for f in all_files]
+        existing_df = pd.concat(df_list, ignore_index=True)
+        existing_df.drop_duplicates(subset=['street_name', 'number'], inplace=True)
+        yesterday_path = all_files[-1]  # Use the latest file for logging
+    else:
+        existing_df = pd.DataFrame()
+        yesterday_path = None
 
     logging.info(f"Using existing data from {yesterday_path} if available.")
     logging.info(f"Output will be saved to {output_path}")
@@ -333,7 +361,6 @@ def scrape_main():
     else:
         print(f"File {output_path} does not exist. Starting fresh scrape.")
         df = pd.DataFrame()  # <-- move this up before retry loop
-        counter = 0
 
         for page in pages:
             success = False  # track success for this page
@@ -353,7 +380,13 @@ def scrape_main():
                     logging.error(f"❌ Error processing page {page} on attempt {attempt + 1}: {e}")
 
             if not success:
-                logging.error(f"⛔ Skipping page {page} after {max_retries} failed attempts.")
+                logging.error(f"⛔ Page {page} failed after {max_retries} attempts.")
+                if page > 40:
+                    logging.error(f"🛑 Stopping page loop because page {page} > 40 failed.")
+                    break
+                else:
+                    logging.warning(f"➡️ Continuing despite failure on page {page} (page ≤ 40).")
+
 
         df.drop_duplicates(subset=['street_name', 'number'], inplace=True)
         df.reset_index(drop=True, inplace=True)
@@ -365,6 +398,6 @@ def scrape_main():
         print(f"Data saved to {output_path}")
 
 if __name__ == "__main__":
-    scrape_main()
+    scrape_main(local=True)
     print("Scraping completed successfully!")
 # %%

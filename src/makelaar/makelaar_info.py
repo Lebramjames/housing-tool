@@ -1,7 +1,12 @@
 # %%
 import argparse
 import pyperclip
-from src.utils.get_url import get_html
+
+# make sure we are able to import from src
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from utils.get_url import get_html
 
 def extract_html_snippet(html: str, keyword: str, window: int = 10000):
     index = html.lower().find(keyword.lower())
@@ -25,7 +30,7 @@ def main():
     try:
         html = get_html(args.url)
         snippet = extract_html_snippet(html, args.street)
-        function_code = load_function_code("src/makelaar/wester.py")
+        function_code = load_function_code("src/makelaar/breakdown/wester.py")
 
         prompt = f""" this is for company {args.url.split('/')[2]}
 I want to extract the following fields for all listings visible in this HTML:

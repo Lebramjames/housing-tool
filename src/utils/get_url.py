@@ -10,9 +10,9 @@ def get_html(url):
     }
     response = requests.get(url, headers=headers, verify=False)
     if response.status_code == 200:
-        logging.info(f"Successfully retrieved page: {url}")
+        # logging.info(f"Successfully retrieved page: {url}")
         return response.text
     else:
-        print(f"Failed to retrieve page with status code: {response.status_code}")
+        # print(f"Failed to retrieve page with status code: {response.status_code}")
         return None
     

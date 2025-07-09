@@ -1,41 +1,41 @@
-name: Makelaar Main Page Scraper
+# name: Makelaar Main Page Scraper
 
-on:
-  push:
-    branches:
-      - main
+# on:
+#   push:
+#     branches:
+#       - main
 
-  schedule:
-    - cron: '0 2 * * *'  # Runs daily at 06:00 UTC
+#   schedule:
+#     - cron: '0 2 * * *'  # Runs daily at 06:00 UTC
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    env:
-      MY_SECRET: ${{ secrets.OPENAI_API_KEY }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+# jobs:
+#   build:
+#     runs-on: ubuntu-latest
+#     env:
+#       MY_SECRET: ${{ secrets.OPENAI_API_KEY }}
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
+#       - name: Set up Python
+#         uses: actions/setup-python@v5
+#         with:
+#           python-version: '3.x'
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+#       - name: Install dependencies
+#         run: pip install -r requirements.txt
 
-      - name: Run scraper
-        run: python src/makelaar/scrape_makelaar_main_page.py
+#       - name: Run scraper
+#         run: python src/makelaar/scrape_makelaar_main_page.py
 
-      - name: Commit and push results
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: |
-          git config --global user.name 'Lebramjames'
-          git config --global user.email 'bramgriffioen98@gmail.com'
-          git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}
-          git add data/*.csv
-          git add data/*.txt
-          git commit -m "🗓️ Daily Makelaar Main Page scrape - $(date +'%Y-%m-%d')" || echo "No changes to commit"
-          git push origin main
+#       - name: Commit and push results
+#         env:
+#           GH_TOKEN: ${{ secrets.GH_PAT }}
+#         run: |
+#           git config --global user.name 'Lebramjames'
+#           git config --global user.email 'bramgriffioen98@gmail.com'
+#           git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}
+#           git add data/*.csv
+#           git add data/*.txt
+#           git commit -m "🗓️ Daily Makelaar Main Page scrape - $(date +'%Y-%m-%d')" || echo "No changes to commit"
+#           git push origin main

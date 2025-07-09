@@ -21,7 +21,7 @@ from selenium.webdriver.edge.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
 
-from src.funda.clean_company_scrape import clean_company_scrape
+from src.funda.clean_housing_page import clean_company_scrape
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -96,7 +96,7 @@ def extract_listing_data(html):
     soup = BeautifulSoup(html, 'html.parser')
 
     # Step 1: Find the script tag with __NUXT__ or JSON-like data
-    script = soup.find('script', text=re.compile(r'window\.__NUXT__'))
+    script = soup.find('script', string=re.compile(r'window\.__NUXT__'))
     if not script:
         return {}
 
@@ -189,7 +189,9 @@ def extract_popularity_data(html):
         if len(blur_values) >= 2:
             # The first is views, second is saved count
             data['bekeken'] = blur_values[0].get_text(strip=True)
-            data['bewaard'] = blur_values[1].get_text(strip=True)
+            data['bekeken'] = re.sub(r'\D', '', blur_values[0].get_text(strip=True))  # Remove non-digit characters
+            data['bewaard'] = blur_values[1].get_text(strip=True) 
+            data['bewaard'] = re.sub(r'\D', '', blur_values[1].get_text(strip=True))  # Remove non-digit characters
 
     return data or None
 
@@ -221,6 +223,7 @@ def extract_kadastrale_info_from_flat_html(raw_text):
     return {
         "eigendomssituatie": extract_value("cadastral-ownershipsituation"),
         "lasten": extract_value("cadastral-fees")
+        # 
     }
 
 def extract_omschrijving(html):
@@ -247,6 +250,19 @@ def extract_omschrijving(html):
 
     return None
 
+def extract_neighborhood_block(html):
+    soup = BeautifulSoup(html, 'html.parser')
+    result = {}
+
+    # --- Fallback: extract from top header if primary not found ---
+    if 'neighborhood_name' not in result:
+        fallback_link = soup.find('a', attrs={'aria-label': True}, href=re.compile(r'/informatie/'))
+        if fallback_link:
+            result['neighborhood_fallback_name'] = fallback_link.get('aria-label')
+            result['neighborhood_fallback_url'] = fallback_link.get('href')
+
+    return result if result else None
+
 def get_valid_html_versions(url, service=None, options=None):
 
     html_req = get_html(url)
@@ -261,7 +277,7 @@ def get_valid_html_versions(url, service=None, options=None):
 def scrape_company_information(local = False):
     today = pd.Timestamp.now().strftime('%Y-%m-%d')
 
-    input_path = os.path.join(os.getcwd(), 'data', "raw", f'raw_funda_main_data_{today}.csv')
+    input_path = os.path.join(os.getcwd(), 'data', "funda", "raw", f'raw_funda_main_data_{today}.csv')
     df = pd.read_csv(input_path)
 
     df.sort_values(by='price/m2', inplace=True)
@@ -282,6 +298,11 @@ def scrape_company_information(local = False):
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
 
+    output_path = os.path.join(os.getcwd(), 'data', 'funda', f'funda_data_{today}.csv')
+    # sort based on idx in df_working
+    df_working = df_working.reset_index(drop=True)
+
+    df_final = pd.DataFrame()
 
     for idx, row in df_working.iterrows():
         if idx % 10 == 0:
@@ -291,13 +312,7 @@ def scrape_company_information(local = False):
 
         for attempt in range(3):
             try:
-                print(f"Attempt {attempt + 1}: {url}")
                 html = get_valid_html_versions(url, service=service, options=options)
-                # writh if idx = 1 write html to text: 
-                # if idx == 1:
-                #     with open('test.html', 'w', encoding='utf-8') as f:
-                #         f.write(html)
-                # Extract structured content
                 indeling_info = extract_indeling_info(html)
                 kadaster_info = extract_kadastrale_info_from_flat_html(html)
                 listing_data = extract_listing_data(html)
@@ -306,6 +321,7 @@ def scrape_company_information(local = False):
                 surface_info = extract_surface_areas(html)
                 popularity_data = extract_popularity_data(html)
                 omschrijving = extract_omschrijving(html)
+                buurt_info = extract_neighborhood_block(html)
 
                 # Combine all extracted data
                 flat_data = {}
@@ -316,7 +332,8 @@ def scrape_company_information(local = False):
                     "overdracht": overdracht_info,
                     "surface": surface_info,
                     "popularity": popularity_data,
-                    "buurt": omschrijving
+                    "omschrijving": omschrijving,
+                    "buurt": buurt_info
                 }.items():
                     if isinstance(value, dict):
                         for sub_key, sub_value in value.items():
@@ -325,17 +342,12 @@ def scrape_company_information(local = False):
                         flat_data[key] = value
 
                 flat_data["energy_label"] = energy_label
-                
-                # if idx == 1: 
-                #     # save df_working to a csv file
-                #     output_path = os.path.join(os.getcwd(), 'data', f'funda_data_working_{today}.csv')
-                #     df_working.to_csv(output_path, index=False)
-
-                # Update DataFrame
                 for col, val in flat_data.items():
                     df_working.at[idx, col] = val
 
-                logging.info(f"✅ Successfully processed: {url}")
+                df_final = pd.concat([df_final, df_working.iloc[[idx]]], ignore_index=True)
+                df_final.drop_duplicates(subset=['url'], keep='last', inplace=True)
+                df_final.to_csv(output_path, index=False, sep=';')
                 break  # Break out of retry loop after success
 
             except Exception as e:
@@ -343,9 +355,9 @@ def scrape_company_information(local = False):
                 if attempt == 2:
                     logging.error(f"⛔ Max retries reached for {url}. Skipping.")
                 continue
+        
 
 
-    output_path = os.path.join(os.getcwd(), 'data', f'funda_data_{today}.csv')
     df_working.to_csv(output_path, index=False)
     logging.info(f"🔄 Saved output to {output_path}")
 

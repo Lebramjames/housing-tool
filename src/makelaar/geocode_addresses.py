@@ -20,7 +20,7 @@ def save_cache_to_disk(cache_dict, pickle_path, csv_path):
     df.to_csv(csv_path, index=False)
 
 
-def geocode_addresses_with_history(results_df: pd.DataFrame, cache_path="data/geo_cache.pkl", history_dir="data/makelaars", temp_save_path="data/geocoding_progress.csv") -> pd.DataFrame:
+def geocode_addresses_with_history(results_df: pd.DataFrame, cache_path="data/geo_information/geo_cache.pkl", history_dir="data/makelaar", temp_save_path="data/geo_information/geocoding_progress.csv") -> pd.DataFrame:
     # Initialize geocoder
     geolocator = Nominatim(user_agent="funda_scraper")
     geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)
@@ -91,7 +91,7 @@ def geocode_addresses_with_history(results_df: pd.DataFrame, cache_path="data/ge
             latlon_df.to_csv(temp_save_path, index=False)
 
             # Save cache to both pickle and CSV
-            save_cache_to_disk(geo_cache, cache_path, "data/geo_cache.csv")
+            save_cache_to_disk(geo_cache, cache_path, "data/geo_information/geo_cache.csv")
 
 
     # Final merge of newly geocoded addresses
@@ -103,7 +103,7 @@ def geocode_addresses_with_history(results_df: pd.DataFrame, cache_path="data/ge
         lambda row: pd.Series(geo_cache.get(row['full_address_processed'], (row.get('latitude'), row.get('longitude')))),
         axis=1
     )
-
+    
     return results_df
 
 if __name__ == "__main__":

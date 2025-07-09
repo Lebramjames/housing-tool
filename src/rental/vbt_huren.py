@@ -1,88 +1,224 @@
 # %%
-from bs4 import BeautifulSoup
-import json
+# scraper.py
+import os
+import time
 import re
+import tempfile
+import pandas as pd
+from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.edge.options import Options as EdgeOptions
+from selenium.webdriver.edge.service import Service as EdgeService
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait, Select
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from webdriver_manager.chrome import ChromeDriverManager
 
-def extract_vbtverhuurmakelaars_data(html: str):
-    soup = BeautifulSoup(html, "html.parser")
-    listings = []
-    base_url = "https://www.vbtverhuurmakelaars.nl"
+OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "huren")
+BASE_URL = "https://vbtverhuurmakelaars.nl/woningen"
+EDGE_DRIVER_PATH = r"C:\Users\bgriffioen\OneDrive - STX Commodities B.V\Desktop\funda-project\funda-tool\src\utils\msedgedriver.exe"
 
-    # Locate <script> tag containing __SAPPER__ object
-    script_tag = None
-    for s in soup.find_all("script"):
-        if s.string and "__SAPPER__=" in s.string:
-            script_tag = s.string
+def get_driver(local=False):
+    # Common browser arguments
+    def add_common_options(opts):
+        opts.add_argument("--headless=new")
+        opts.add_argument("--disable-gpu")
+        opts.add_argument("--no-sandbox")
+        opts.add_argument("--window-size=1920,1080")
+        temp_profile_dir = tempfile.mkdtemp()
+        opts.add_argument(f"--user-data-dir={temp_profile_dir}")
+        return opts
+
+    if local:
+        options = add_common_options(EdgeOptions())
+        options.use_chromium = True
+        service = EdgeService(executable_path=EDGE_DRIVER_PATH)
+        driver = webdriver.Edge(service=service, options=options)
+    else:
+        options = add_common_options(ChromeOptions())
+        service = ChromeService(executable_path=ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=options)
+
+    return driver
+
+
+def accept_cookies(driver):
+    driver.execute_script("""
+        const iframe = document.querySelector('iframe.trengo-vue-iframe');
+        if (iframe) iframe.style.display = 'none';
+    """)
+    try:
+        button = WebDriverWait(driver, 5).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "button.button.accept.show-nadvanced.svelte-19xnkg3"))
+        )
+        driver.execute_script("arguments[0].click();", button)
+    except TimeoutException:
+        print("[INFO] No cookie banner found.")
+
+def page_settings(driver):
+    for attempt in range(3):
+        try:
+            city_input = WebDriverWait(driver, 5).until(
+                EC.visibility_of_element_located((By.CSS_SELECTOR, 'input[name="city"]'))
+            )
+            city_input.clear()
+            city_input.send_keys("Amsterdam")
+
+            price_dropdown = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.NAME, "priceRental-max"))
+            )
+            Select(price_dropdown).select_by_value("2000")
+            break
+        except StaleElementReferenceException:
+            print(f"[INFO] Stale element on attempt {attempt+1}, retrying...")
+            time.sleep(1)
+
+def parse_property_cards(html):
+    soup = BeautifulSoup(html, 'html.parser')
+    properties = []
+
+    for listing in soup.select('a.property'):
+        prop = {
+            'status': listing.select_one('div').get_text(strip=True),
+            'city': "Amsterdam",
+            'address': listing.select_one('span.normal').get_text(strip=True),
+            'price_per_month': int(
+                listing.select_one('div.price').get_text(strip=True)
+                .replace('€', '').replace(',-', '').replace('.', '').strip()
+            )
+        }
+
+        rows = listing.select('table tr')
+        for row in rows:
+            cells = row.select('td')
+            if len(cells) < 2:
+                continue
+            key, value = cells[0].get_text(strip=True), cells[1].get_text(strip=True)
+            if key == "Soort object":
+                prop['type'] = value
+            elif key == "Woonoppervlakte":
+                prop['surface_area_m2'] = int(value.replace("m²", "").strip())
+            elif key == "Kamers":
+                prop['rooms'] = int(value.split()[0])
+            elif key == "Servicekosten":
+                prop['service_costs_per_month'] = int(value.replace('€', '').replace(',-', '').replace('per maand', '').strip())
+            elif key == "Huurtermijn (min.)":
+                prop['minimum_lease_term_months'] = int(value.replace("Maanden", "").strip())
+            elif key == "Beschikbaar":
+                prop['available_from'] = value
+            elif key == "Aantal reacties":
+                prop['number_of_responses'] = int(value)
+
+        note = listing.select_one('p.nomore')
+        prop['note'] = note.get_text(strip=True) if note else ''
+        prop['is_available'] = False if note else True
+
+        style = listing.select_one('.visimage')['style']
+        prop['image_url'] = style.split('url(')[1].split(')')[0]
+        prop['detail_url'] = listing['href']
+
+        status_map = {
+            'Beschikbaar': 'Beschikbaar',
+            'iDeze woning is momenteel aangeboden aan een kandidaat. Je kunt nog reageren op deze woning, je komt dan op de wachtlijst.Aangeboden': 'Aangeboden',
+            'iDeze woning is verhuurd. Je kunt niet meer reageren op deze woning.Verhuurd': 'Verhuurd'
+        }
+        prop['status'] = status_map.get(prop['status'], prop['status'])
+        # change beschikbaar to True 
+        beschikbaar_map = {
+            'Beschikbaar': True,
+            'Aangeboden': False,
+            'Verhuurd': False
+        }
+        prop['is_available'] = beschikbaar_map.get(prop['status'], False)
+        
+        properties.append(prop)
+
+    return properties
+
+def extract_coordinates(html):
+    cleaned = html.replace('\\u002F', '/')
+    matches = re.findall(r'coordinate\s*:\s*\[\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*\]', cleaned)
+    return [{'longitude': float(lon), 'latitude': float(lat)} for lon, lat in matches]
+
+
+def get_neighborhoods_from_coordinates(df):
+    # 1. Round coordinates slightly to group nearby ones (optional)
+    df['lat_lon'] = list(zip(df['latitude'].round(5), df['longitude'].round(5)))
+
+    # 2. Get unique coordinate pairs
+    unique_coords = df['lat_lon'].dropna().unique()
+
+    # 3. Set up geocoder with rate limiter (1 request per second to avoid block)
+    geolocator = Nominatim(user_agent="amsterdam-housing-scraper")
+    geocode = RateLimiter(geolocator.reverse, min_delay_seconds=1)
+
+    # 4. Query neighborhoods only once per unique (lat, lon)
+    coord_to_neighborhood = {}
+    for coord in unique_coords:
+        try:
+            location = geocode(coord, exactly_one=True, language="nl")
+            suburb = location.raw.get("address", {}).get("suburb", "")
+            wijk = location.raw.get("address", {}).get("neighbourhood", "")
+            buurt = location.raw.get("address", {}).get("quarter", "")
+            coord_to_neighborhood[coord] = suburb or wijk or buurt or ""
+        except Exception as e:
+            print(f"Failed on {coord}: {e}")
+            coord_to_neighborhood[coord] = ""
+
+    # 5. Map back to DataFrame
+    df['neighborhood'] = df['lat_lon'].map(coord_to_neighborhood)
+
+    # 6. Drop helper column if needed
+    df.drop(columns=['lat_lon'], inplace=True)
+
+    return df
+
+def scrape_all_pages(driver, max_pages=100):
+    df = pd.DataFrame()
+    for page_num in range(1, max_pages + 1):
+        page_url = f"{BASE_URL}/{page_num}" if page_num > 1 else BASE_URL
+        driver.get(page_url)
+        time.sleep(1)
+        html = driver.page_source
+        soup = BeautifulSoup(html, "html.parser")
+        if soup.select_one("div.wrapped > h1") and "Helaas, deze pagina is niet" in soup.text:
+            print(f"[INFO] Page {page_num} not available, stopping.")
             break
 
-    if not script_tag:
-        return listings
+        properties = parse_property_cards(html)
+        if not properties:
+            print(f"[INFO] No properties on page {page_num}, stopping.")
+            break
 
+        coordinates = extract_coordinates(html)
+        if len(coordinates) == len(properties):
+            for i, prop in enumerate(properties):
+                prop.update(coordinates[i])
+
+        df = pd.concat([df, pd.DataFrame(properties)], ignore_index=True)
+        df['date_time_scraped'] = pd.Timestamp.now()
+    return df
+
+def run_pipeline(local  = False):
+    driver = get_driver(local=local)
     try:
-        # Extract JSON part inside __SAPPER__
-        json_match = re.search(r'__SAPPER__=\{.*?preloaded:\[.*?,(\{.*?\})\]\}', script_tag, re.DOTALL)
-        if not json_match:
-            return listings
+        driver.get(BASE_URL)
+        accept_cookies(driver)
+        page_settings(driver)
+        df = scrape_all_pages(driver)
+        df = get_neighborhoods_from_coordinates(df)
 
-        data_str = json_match.group(1)
-        # Safely replace JS undefineds and booleans to be JSON-compatible
-        data_str = re.sub(r'\bundefined\b', 'null', data_str)
-        data_str = data_str.replace("true", "true").replace("false", "false")
-
-        # Try loading houses list manually (due to nonstandard JSON)
-        house_data_matches = re.findall(r'\{address:\{.*?externalLink:"(.*?)".*?\}', data_str)
-        house_blocks = re.findall(r'address:\{.*?\},prices:\{.*?\},.*?externalLink:"(.*?)"', data_str)
-
-        # Alternatively, parse the 'houses' array using pattern matching:
-        houses = re.findall(r'\{address:(\{.*?\}),prices:(\{.*?\}),.*?rooms:([^,]+),.*?acceptance:"(.*?)".*?externalLink:"(.*?)"', data_str)
-
-        for address_raw, prices_raw, rooms, acceptance, link in houses:
-            # Extract address
-            house_match = re.search(r'house:"([^"]+)"', address_raw)
-            city_match = re.search(r'city:"([^"]+)"', address_raw)
-            house = house_match.group(1) if house_match else None
-            city = city_match.group(1) if city_match else None
-            full_adres = f"{house} in {city}" if house and city else None
-
-            # URL
-            url = link if link else None
-
-            # Price
-            price_match = re.search(r'price:(\d+)', prices_raw)
-            price = int(price_match.group(1)) if price_match else None
-
-            # Area
-            plot_match = re.search(r'plot:(\d+)', data_str)
-            area = int(plot_match.group(1)) if plot_match else None
-
-            # Rooms
-            try:
-                num_rooms = int(rooms)
-            except ValueError:
-                num_rooms = None
-
-            # Availability
-            available = f"Beschikbaar vanaf {acceptance[:10]}" if acceptance and acceptance != "null" else "Onbekend"
-
-            listings.append({
-                "full_adres": full_adres,
-                "url": url,
-                "city": city,
-                "price": price,
-                "area": area,
-                "num_rooms": num_rooms,
-                "available": available
-            })
-    except Exception as e:
-        print(f"Error parsing listings: {e}")
-
-    return listings
+        df_old = pd.read_csv(f"{OUTPUT_DIR}/properties_amsterdam.csv") if os.path.exists(f"{OUTPUT_DIR}/properties_amsterdam.csv") else pd.DataFrame()
+        if not df_old.empty:
+            df = pd.concat([df_old, df]).drop_duplicates(subset=['detail_url'], keep='last').reset_index(drop=True)
+        df.to_csv(f"{OUTPUT_DIR}/properties_amsterdam.csv", index=False)
+        print(f"[DONE] Scraped {len(df)} properties and saved to CSV.")
+    finally:
+        driver.quit()
 
 if __name__ == "__main__":
-    from src.utils.get_url import get_html
-    url = 'https://vbtverhuurmakelaars.nl/woningen'
-    html = get_html(url)
-    listings = extract_vbtverhuurmakelaars_data(html)
-    for listing in listings:
-        print(listing)
-    url_format = "https://vbtverhuurmakelaars.nl/woningen/{page}"
+    run_pipeline(local=True)

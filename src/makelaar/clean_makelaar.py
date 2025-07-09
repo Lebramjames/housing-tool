@@ -17,6 +17,8 @@ def prepare_address_fields(df: pd.DataFrame, full_address_col: str = "full_adres
                       'street', 'number_extension', 'city', 'full_address_processed'
     """
 
+    
+
     def split_address(addr):
         if not isinstance(addr, str):
             return pd.Series([None, None, None])

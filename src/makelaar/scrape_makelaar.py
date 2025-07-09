@@ -1,4 +1,18 @@
 # %%
+"""
+This script is part of the real estate scraper project:
+1. This script extracts metadata from scraper scripts in a specified directory,
+2. runs the scrapers to collect data from real estate listings,
+3. and combines the results into a single daily CSV file.
+
+
+Input: 
+- Directory containing Python scraper scripts (e.g., `src/makelaar/breakdown`).
+Output:
+- A DataFrame with metadata about each scraper function.
+- A combined CSV file with results from all scrapers, named `makelaar_results_<date>.csv` in the `data/makelaars` directory.
+
+"""
 import os
 import ast
 import re
@@ -7,6 +21,9 @@ import numpy as np
 import importlib.util
 from typing import Optional
 from datetime import date
+
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 from src.utils.get_url import get_html
 
@@ -90,7 +107,7 @@ def process_makelaars(
 
     today_str = date.today().strftime("%Y-%m-%d")
     if output_csv is None:
-        output_csv = f"data/makelaars/makelaar_results_{today_str}.csv"
+        output_csv = f"data/makelaar/makelaar_results_{today_str}.csv"
 
     os.makedirs(os.path.dirname(output_csv), exist_ok=True)
 
@@ -125,15 +142,19 @@ def process_makelaars(
         df = df.head(row_limit)
 
     combined_results = []
+    # sort idx in df
+    df = df.sort_index()
 
-    for _, row in df.iterrows():
+    for idx, row in df.iterrows():
+        if idx % 10 == 0:
+            logging.info(f"Processing row {idx + 1}/{len(df)}: {row['python_name']}")        
         if row['python_name'] in already_scraped:
             print(f"⏭ Skipping {row['python_name']} (already scraped today)")
             continue
 
-        print(f"🔍 Scraping {row['python_name']}...")
+        # print(f"🔍 Scraping {row['python_name']}...")
 
-        module_path = os.path.join("src", "makelaar", row["python_name"])
+        module_path = os.path.join("src", "makelaar", "breakdown", row["python_name"])
         func_name = row["function_name"]
         url_list = row["url_list"]
 
@@ -153,7 +174,8 @@ def process_makelaars(
 
         makelaar_results = []
 
-        for url in url_list:
+    
+        for idx, url in enumerate(url_list):
             try:
                 html = get_html(url)
                 data_list = scraper_func(html)
@@ -174,10 +196,7 @@ def process_makelaars(
                 print(f"⚠️ Error scraping {url}: {e}")
 
         if makelaar_results:
-            print(f"✅ Collected {len(makelaar_results)} rows from {row['python_name']}")
             combined_results.extend(makelaar_results)
-        else:
-            print(f"⚠️ No results from {row['python_name']}")
 
     # Step 3: Save combined data to single CSV
     if combined_results:
@@ -204,7 +223,7 @@ def process_makelaars(
                 final_df = pd.read_csv(output_csv)
             except Exception as e:
                 print(f"⚠️ Failed reading {output_csv}: {e}")
-        return final_df
+        return 
 
     print(f"⏱ Total time: {perf_counter() - time_start:.2f} seconds")
     return final_df
@@ -212,7 +231,7 @@ def process_makelaars(
 def run_makelaar_scraper():
     df = extract_scraper_metadata("src/makelaar/breakdown")
     today_str = date.today().strftime("%Y-%m-%d")
-    output_csv = f"data/makelaars/makelaar_results_{today_str}.csv"
+    output_csv = f"data/makelaar/makelaar_results_{today_str}.csv"
     results_df = process_makelaars(df, output_csv=output_csv, num_pages=5, row_limit=None)
     return results_df
 
