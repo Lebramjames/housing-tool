@@ -148,32 +148,74 @@ def extract_coordinates(html):
     return [{'longitude': float(lon), 'latitude': float(lat)} for lon, lat in matches]
 
 
+# def get_neighborhoods_from_coordinates(df):
+#     from geopy.geocoders import Nominatim
+#     from geopy.extra.rate_limiter import RateLimiter
+
+#     df['lat_lon'] = list(zip(df['latitude'].round(5), df['longitude'].round(5)))
+#     unique_coords = df['lat_lon'].dropna().unique()
+
+#     geolocator = Nominatim(user_agent="amsterdam-housing-scraper")
+#     geocode = RateLimiter(geolocator.reverse, min_delay_seconds=1, error_wait_seconds=2, swallow_exceptions=True)
+
+#     coord_to_neighborhood = {}
+#     for coord in unique_coords:
+#         try:
+#             location = geocode(coord, exactly_one=True, language="nl")
+#             if location and hasattr(location, "raw"):
+#                 suburb = location.raw.get("address", {}).get("suburb", "")
+#                 wijk = location.raw.get("address", {}).get("neighbourhood", "")
+#                 buurt = location.raw.get("address", {}).get("quarter", "")
+#                 coord_to_neighborhood[coord] = suburb or wijk or buurt or ""
+#             else:
+#                 coord_to_neighborhood[coord] = ""
+#         except Exception:
+#             coord_to_neighborhood[coord] = ""
+
+#     df['neighborhood'] = df['lat_lon'].map(coord_to_neighborhood)
+#     df.drop(columns=['lat_lon'], inplace=True)
+#     return df
+
 def get_neighborhoods_from_coordinates(df):
-    from geopy.geocoders import Nominatim
-    from geopy.extra.rate_limiter import RateLimiter
+    import os
+    import json
+    from pathlib import Path
+    from shapely.geometry import Point, Polygon
 
-    df['lat_lon'] = list(zip(df['latitude'].round(5), df['longitude'].round(5)))
-    unique_coords = df['lat_lon'].dropna().unique()
+    # Load neighborhoods geojson
+    current_dir = Path(__file__).resolve().parent
+    parent_dir = current_dir.parent.parent
+    json_path = os.path.join(parent_dir, 'data', 'neighborhoods_amsterdam.json')
+    with open(json_path, 'r', encoding='utf-8') as f:
+        geojson = json.load(f)
 
-    geolocator = Nominatim(user_agent="amsterdam-housing-scraper")
-    geocode = RateLimiter(geolocator.reverse, min_delay_seconds=1, error_wait_seconds=2, swallow_exceptions=True)
+    # Prepare polygons
+    neighborhoods = []
+    for feature in geojson['features']:
+        name = feature['properties'].get('neighborhood', '')
+        coords = feature['geometry']['coordinates']
+        # Handle both Polygon and MultiPolygon
+        if feature['geometry']['type'] == 'Polygon':
+            polygons = [Polygon(coords[0])]
+        elif feature['geometry']['type'] == 'MultiPolygon':
+            polygons = [Polygon(poly[0]) for poly in coords]
+        else:
+            continue
+        neighborhoods.append((name, polygons))
 
-    coord_to_neighborhood = {}
-    for coord in unique_coords:
-        try:
-            location = geocode(coord, exactly_one=True, language="nl")
-            if location and hasattr(location, "raw"):
-                suburb = location.raw.get("address", {}).get("suburb", "")
-                wijk = location.raw.get("address", {}).get("neighbourhood", "")
-                buurt = location.raw.get("address", {}).get("quarter", "")
-                coord_to_neighborhood[coord] = suburb or wijk or buurt or ""
-            else:
-                coord_to_neighborhood[coord] = ""
-        except Exception:
-            coord_to_neighborhood[coord] = ""
+    def find_neighborhood(lat, lon):
+        point = Point(lon, lat)
+        for name, polygons in neighborhoods:
+            for poly in polygons:
+                if poly.contains(point):
+                    return name
+        return ""
 
-    df['neighborhood'] = df['lat_lon'].map(coord_to_neighborhood)
-    df.drop(columns=['lat_lon'], inplace=True)
+    df['neighborhood'] = df.apply(
+        lambda row: find_neighborhood(row['latitude'], row['longitude'])
+        if pd.notnull(row.get('latitude')) and pd.notnull(row.get('longitude')) else "",
+        axis=1
+    )
     return df
 
 def scrape_all_pages(driver, max_pages=100):
