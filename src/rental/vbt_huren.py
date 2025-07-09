@@ -146,35 +146,31 @@ def extract_coordinates(html):
 
 
 def get_neighborhoods_from_coordinates(df):
-    # 1. Round coordinates slightly to group nearby ones (optional)
-    df['lat_lon'] = list(zip(df['latitude'].round(5), df['longitude'].round(5)))
+    from geopy.geocoders import Nominatim
+    from geopy.extra.rate_limiter import RateLimiter
 
-    # 2. Get unique coordinate pairs
+    df['lat_lon'] = list(zip(df['latitude'].round(5), df['longitude'].round(5)))
     unique_coords = df['lat_lon'].dropna().unique()
 
-    # 3. Set up geocoder with rate limiter (1 request per second to avoid block)
     geolocator = Nominatim(user_agent="amsterdam-housing-scraper")
-    geocode = RateLimiter(geolocator.reverse, min_delay_seconds=1)
+    geocode = RateLimiter(geolocator.reverse, min_delay_seconds=1, error_wait_seconds=2, swallow_exceptions=True)
 
-    # 4. Query neighborhoods only once per unique (lat, lon)
     coord_to_neighborhood = {}
     for coord in unique_coords:
         try:
             location = geocode(coord, exactly_one=True, language="nl")
-            suburb = location.raw.get("address", {}).get("suburb", "")
-            wijk = location.raw.get("address", {}).get("neighbourhood", "")
-            buurt = location.raw.get("address", {}).get("quarter", "")
-            coord_to_neighborhood[coord] = suburb or wijk or buurt or ""
-        except Exception as e:
-            print(f"Failed on {coord}: {e}")
+            if location and hasattr(location, "raw"):
+                suburb = location.raw.get("address", {}).get("suburb", "")
+                wijk = location.raw.get("address", {}).get("neighbourhood", "")
+                buurt = location.raw.get("address", {}).get("quarter", "")
+                coord_to_neighborhood[coord] = suburb or wijk or buurt or ""
+            else:
+                coord_to_neighborhood[coord] = ""
+        except Exception:
             coord_to_neighborhood[coord] = ""
 
-    # 5. Map back to DataFrame
     df['neighborhood'] = df['lat_lon'].map(coord_to_neighborhood)
-
-    # 6. Drop helper column if needed
     df.drop(columns=['lat_lon'], inplace=True)
-
     return df
 
 def scrape_all_pages(driver, max_pages=100):
