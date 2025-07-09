@@ -6,7 +6,7 @@ on:
       - main
 
   schedule:
-    - cron: '30 2 * * *'  # runs daily at 2:30
+    - cron: '30 2 * * *'  # runs daily at 2:30 UTC
 
 jobs:
   build:
@@ -16,6 +16,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # Needed to allow pushing changes back
+          token: ${{ secrets.GH_PATH }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -29,12 +32,15 @@ jobs:
         run: python src/rental/process_rental_main.py
 
       - name: Commit and push results
-        env:
-          GH_TOKEN: ${{ secrets.GH_PATH }}
         run: |
           git config --global user.name 'Lebramjames'
           git config --global user.email 'bramgriffioen98@gmail.com'
-          git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}
           git add data/huren/properties_amsterdam.csv
-          git commit -m "Update Amsterdam property data $(date +'%Y-%m-%d')""
-          git push origin main
+
+          # Only commit if there are changes
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update Amsterdam property data $(date +'%Y-%m-%d')"
+            git push origin main
+          fi
