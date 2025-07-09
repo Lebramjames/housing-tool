@@ -10,10 +10,13 @@
 import logging
 
 import vbt_huren
+import send_email
 
 def process_rental_main():
 
     vbt_huren.run_pipeline()
+    send_email.run_pipeline()
+
 
 if __name__ == "__main__":
     process_rental_main()

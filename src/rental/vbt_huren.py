@@ -218,6 +218,50 @@ def get_neighborhoods_from_coordinates(df):
     )
     return df
 
+
+def get_preference_from_coordinates(df):
+    import os
+    import json
+    from pathlib import Path
+    from shapely.geometry import Point, Polygon
+
+    # Load preference geojson
+    current_dir = Path(__file__).resolve().parent
+    parent_dir = current_dir.parent.parent
+    json_path = os.path.join(parent_dir, 'data', 'preference.json')
+    with open(json_path, 'r', encoding='utf-8') as f:
+        geojson = json.load(f)
+
+    # Prepare polygons
+    preferences = []
+    for feature in geojson['features']:
+        name = feature['properties'].get('preference', '')
+        coords = feature['geometry']['coordinates']
+        # Handle both Polygon and MultiPolygon
+        if feature['geometry']['type'] == 'Polygon':
+            polygons = [Polygon(coords[0])]
+        elif feature['geometry']['type'] == 'MultiPolygon':
+            polygons = [Polygon(poly[0]) for poly in coords]
+        else:
+            continue
+        preferences.append((name, polygons))
+
+    def is_in_preference(lat, lon):
+        point = Point(lon, lat)
+        for name, polygons in preferences:
+            for poly in polygons:
+                if poly.contains(point):
+                    return True
+        return False
+
+    df['preference'] = df.apply(
+        lambda row: is_in_preference(row['latitude'], row['longitude'])
+        if pd.notnull(row.get('latitude')) and pd.notnull(row.get('longitude')) else False,
+        axis=1
+    )
+    return df
+
+
 def scrape_all_pages(driver, max_pages=100):
     df = pd.DataFrame()
     for page_num in range(1, max_pages + 1):
@@ -252,6 +296,9 @@ def run_pipeline(local  = False):
         page_settings(driver)
         df = scrape_all_pages(driver)
         df = get_neighborhoods_from_coordinates(df)
+        df = get_preference_from_coordinates(df)
+
+        df['price_per_m2'] = df['price_per_month'] / df['surface_area_m2']
 
         df_old = pd.read_csv(f"{OUTPUT_DIR}/properties_amsterdam.csv") if os.path.exists(f"{OUTPUT_DIR}/properties_amsterdam.csv") else pd.DataFrame()
         if not df_old.empty:
