@@ -24,6 +24,6 @@ def send_gmail(to_email, subject, body, gmail_user, app_password = GOOGLE_KEY):
         print(f"❌ Error sending email: {e}")
 
 
-if __name__ == "__main__":
-    # Example usage
-    to_email = "
+# if __name__ == "__main__":
+#     # Example usage
+#     to_email = "

@@ -30,7 +30,7 @@ jobs:
 
       - name: Commit and push results
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ secrets.GH_PATH }}
         run: |
           git config --global user.name 'Lebramjames'
           git config --global user.email 'bramgriffioen98@gmail.com'
