@@ -35,6 +35,6 @@ jobs:
           git config --global user.name 'Lebramjames'
           git config --global user.email 'bramgriffioen98@gmail.com'
           git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}
-          git add data/*.csv
-          git commit -m "🗓️ Daily VBT Housing Page scrape - $(date +'%Y-%m-%d')" || echo "No changes to commit"
+          git add data/huren/properties_amsterdam.csv
+          git commit -m "Update Amsterdam property data $(date +'%Y-%m-%d')""
           git push origin main
