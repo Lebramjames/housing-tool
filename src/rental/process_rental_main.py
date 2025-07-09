@@ -9,16 +9,7 @@
 
 import logging
 
-# log the direct ModuleNotFoundError: No module named 'src'
-import os
-import sys
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s') 
-logging.info("Current working directory: %s", os.getcwd())
-logging.info("Python path: %s", sys.path)
-logging.info("Python version: %s", sys.version)
-logging.info("Python executable: %s", sys.executable)
-
-from src.rental import vbt_huren
+import vbt_huren
 
 def process_rental_main():
 
