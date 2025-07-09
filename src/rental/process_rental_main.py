@@ -10,12 +10,17 @@
 import logging
 
 import vbt_huren
+import bouwinvest
+
 import send_email
 
 def process_rental_main():
 
     vbt_huren.run_pipeline()
-    send_email.run_pipeline()
+    send_email.run_pipeline(rental_company='vbt_huren')
+
+    bouwinvest.run_pipeline()
+    send_email.run_pipeline(rental_company='bouwinvest')
 
 
 if __name__ == "__main__":
