@@ -18,6 +18,9 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from webdriver_manager.chrome import ChromeDriverManager
 
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "huren")
 BASE_URL = "https://vbtverhuurmakelaars.nl/woningen"
 EDGE_DRIVER_PATH = r"C:\Users\bgriffioen\OneDrive - STX Commodities B.V\Desktop\funda-project\funda-tool\src\utils\msedgedriver.exe"
@@ -57,7 +60,7 @@ def accept_cookies(driver):
         )
         driver.execute_script("arguments[0].click();", button)
     except TimeoutException:
-        print("[INFO] No cookie banner found.")
+        logging.warning("Accept cookies button not found or not clickable. Continuing without accepting cookies.")
 
 def page_settings(driver):
     for attempt in range(3):
@@ -74,7 +77,7 @@ def page_settings(driver):
             Select(price_dropdown).select_by_value("2000")
             break
         except StaleElementReferenceException:
-            print(f"[INFO] Stale element on attempt {attempt+1}, retrying...")
+            logging.info(f"[INFO] Stale element on attempt {attempt+1}, retrying...")
             time.sleep(1)
 
 def parse_property_cards(html):
@@ -182,12 +185,12 @@ def scrape_all_pages(driver, max_pages=100):
         html = driver.page_source
         soup = BeautifulSoup(html, "html.parser")
         if soup.select_one("div.wrapped > h1") and "Helaas, deze pagina is niet" in soup.text:
-            print(f"[INFO] Page {page_num} not available, stopping.")
+            logging.info(f"Page {page_num} not available, stopping.")
             break
 
         properties = parse_property_cards(html)
         if not properties:
-            print(f"[INFO] No properties on page {page_num}, stopping.")
+            logging.info(f"[INFO] No properties on page {page_num}, stopping.")
             break
 
         coordinates = extract_coordinates(html)
@@ -212,7 +215,7 @@ def run_pipeline(local  = False):
         if not df_old.empty:
             df = pd.concat([df_old, df]).drop_duplicates(subset=['detail_url'], keep='last').reset_index(drop=True)
         df.to_csv(f"{OUTPUT_DIR}/properties_amsterdam.csv", index=False)
-        print(f"[DONE] Scraped {len(df)} properties and saved to CSV.")
+        logging.info(f"[DONE] Scraped {len(df)} properties and saved to CSV.")
     finally:
         driver.quit()
 

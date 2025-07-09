@@ -1,0 +1,26 @@
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+
+# Ignore environment folders
+.venv/
+env/
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Ignore credentials
+*.env
+secrets.json
+
+# Ignore Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Ignore log files
+*.log
+
+# Ignore compiled files
+*.so
+*.exe
+*.dll
