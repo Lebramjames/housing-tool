@@ -41,7 +41,7 @@ def run_pipeline():
                 all_addresses.extend(df['address'].dropna().unique())
 
     streets = sorted(set(filter(None, [extract_street(a) for a in all_addresses])))
-
+    print(streets)
     # Step 2: Load already geocoded streets
     if os.path.exists(OUTPUT_FILE):
         existing_df = pd.read_csv(OUTPUT_FILE)

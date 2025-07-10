@@ -24,14 +24,16 @@ def extract_street(address):
         return match.group(0).strip().lower() if match else address.strip().lower()
     return None
 
-# Match and enrich each input file
-for file in os.listdir(INPUT_DIR):
-    if file.endswith(".csv"):
+def run_pipeline():
+    # Match and enrich each input file
+    for file in os.listdir(INPUT_DIR):
+        if not file.endswith(".csv"):
+            continue
+        if file.startswith("enriched_"):
+            continue  # Skip already enriched files
+
         input_path = os.path.join(INPUT_DIR, file)
         df = pd.read_csv(input_path)
-
-        if "address" not in df.columns:
-            continue
 
         # Extract street
         df["street_extracted"] = df["address"].map(extract_street)
@@ -71,3 +73,5 @@ for file in os.listdir(INPUT_DIR):
         df.to_csv(output_path, index=False)
         print(f"✅ Enriched and saved to {output_path}")
 
+if __name__ == "__main__":
+    run_pipeline()

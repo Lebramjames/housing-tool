@@ -124,8 +124,8 @@ def extract_listing_data(html):
                 status = status_span.get_text(strip=True) if status_span else None
 
             data.append({
-                'title': title,
-                'address': address,
+                'address': title,
+                'city': address,
                 'available_from': available_from,
                 'price_per_month': price,
                 'surface_m2': surface,
@@ -170,8 +170,8 @@ def clean_dataframe(df):
 
     df['is_available'] = df['status'].apply(lambda x: x == 'Te huur')
 
-    df['title'] = (
-        df['title']
+    df['address'] = (
+        df['address']
         .str.replace('Appartement ', '', regex=False)
         .str.replace('Woning ', '', regex=False)
         .str.strip()
@@ -252,9 +252,8 @@ def run_pipeline(local = False):
     df = df.rename(columns={'details_url': 'link'})
 
 
+    # Add date_scraped column
     df['date_scraped'] = pd.Timestamp.now()
-
-    # 
 
     if os.path.exists(output_path):
         df_old = pd.read_csv(output_path)
@@ -279,14 +278,11 @@ def run_pipeline(local = False):
         df['is_new'] = True
         df_combined = df
 
-        df_combined.to_csv(output_path, index=False)
-        logging.info(f"Data saved to {output_path}")
-
     # address must contain Amsterdam eg: "1014BG Amsterdam" is kept 2671HZ Naaldwijk is removed
-    df_combined = df_combined[df_combined['address'].str.contains(CITY, case=False, na=False)]
+    df_combined = df_combined[df_combined['city'].str.contains(CITY, case=False, na=False)]
     df_combined.to_csv(output_path, index=False)
     logging.info(f"Data saved to {output_path}")
 
 if __name__ == "__main__":
-    run_pipeline()
+    run_pipeline(local=True)
     logging.info(f"[END] Scraping completed for {NAME} in {CITY}.")
