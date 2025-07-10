@@ -12,7 +12,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      GOOGLE_KEY: ${{ secrets.GOOGLE_KEY }}  # ✅ Expose your Google API key here
+      GOOGLE_KEY: ${{ secrets.GOOGLE_KEY }}
+      VESTEDA_USER: ${{ secrets.VESTEDA_USER }}
+      VESTEDA_PASSWORD: ${{ secrets.VESTEDA_PASSWORD }}
 
     steps:
       - name: Checkout code
