@@ -1,4 +1,4 @@
-name: VBT Huren Scraper
+name: Rental Scraper
 
 on:
   push:
@@ -12,12 +12,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      MY_SECRET: ${{ secrets.OPENAI_API_KEY }}
+      GOOGLE_KEY: ${{ secrets.GOOGLE_KEY }}  # ✅ Expose your Google API key here
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # Needed to allow pushing changes back
           token: ${{ secrets.GH_PATH }}
 
       - name: Set up Python
@@ -37,10 +37,8 @@ jobs:
           git config --global user.email 'bramgriffioen98@gmail.com'
           git add data/huren/properties_amsterdam.csv
 
-          # Only commit if there are changes
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
             git commit -m "Update Amsterdam property data $(date +'%Y-%m-%d')"
             git push origin main
-          fi
