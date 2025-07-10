@@ -289,6 +289,7 @@ def scrape_all_pages(driver, max_pages=100):
     return df
 
 def run_pipeline(local  = False):
+    logging.info("[START] Scraping VBT Verhuur Makelaars properties in Amsterdam...")
     driver = get_driver(local=local)
     try:
         driver.get(BASE_URL)
@@ -307,6 +308,8 @@ def run_pipeline(local  = False):
         logging.info(f"[DONE] Scraped {len(df)} properties and saved to CSV.")
     finally:
         driver.quit()
+
+    logging.info("[END] Scraping completed.")
 
 if __name__ == "__main__":
     run_pipeline(local=True)

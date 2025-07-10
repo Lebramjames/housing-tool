@@ -1,82 +1,292 @@
 # %%
-from bs4 import BeautifulSoup
+# scraper.py
+import os
+import time
 import re
+import math
+import tempfile
+import logging
+import pandas as pd
+from bs4 import BeautifulSoup
 
-def extract_ikwilhuren_data(html: str):
-    soup = BeautifulSoup(html, "html.parser")
-    listings = []
-    base_url = "https://ikwilhuren.nu"
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.edge.options import Options as EdgeOptions
+from selenium.webdriver.edge.service import Service as EdgeService
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
+from webdriver_manager.chrome import ChromeDriverManager
 
-    for card in soup.select("div.card-woning"):
+# --- Configuration ---
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+NAME = "ikwilhuren"
+CITY = "amsterdam"
+
+BASE_URL = "https://ikwilhuren.nu/"
+EDGE_DRIVER_PATH = r"C:\Users\bgriffioen\OneDrive - STX Commodities B.V\Desktop\funda-project\funda-tool\src\utils\msedgedriver.exe"
+OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "huren")
+
+
+# --- Webdriver Setup ---
+def get_driver(local=True):
+    def add_common_options(opts):
+        opts.add_argument("--headless=new")
+        opts.add_argument("--disable-gpu")
+        opts.add_argument("--no-sandbox")
+        opts.add_argument("--window-size=1920,1080")
+        temp_profile_dir = tempfile.mkdtemp()
+        opts.add_argument(f"--user-data-dir={temp_profile_dir}")
+        return opts
+
+    if local:
+        options = add_common_options(EdgeOptions())
+        options.use_chromium = True
+        service = EdgeService(executable_path=EDGE_DRIVER_PATH)
+        return webdriver.Edge(service=service, options=options)
+    else:
+        options = add_common_options(ChromeOptions())
+        service = ChromeService(executable_path=ChromeDriverManager().install())
+        return webdriver.Chrome(service=service, options=options)
+
+
+# --- Cookie Banner Acceptance ---
+def accept_cookies(driver):
+    try:
+        time.sleep(10)  # Give time for JS to load
+        script = """
+        const shadowHost = document.querySelector('cookiecode-banner');
+        const shadowRoot = shadowHost?.shadowRoot;
+        const button = shadowRoot?.querySelector('.cc_button_allowall');
+        if (button) button.click();
+        """
+        driver.execute_script(script)
+        logging.info("Cookies accepted via JavaScript.")
+    except Exception as e:
+        logging.error(f"Failed to accept cookies: {e}")
+
+
+
+
+
+# --- Get Total Pages ---
+def get_total_pages(driver):
+    soup = BeautifulSoup(driver.page_source, 'html.parser')
+    try:
+        count_text = soup.find('span', class_='fs-4 ff-roboto-slab d-block fw-bold mb-0')
+        if count_text:
+            count_number = count_text.find('span', class_='text-blue-ncs').text.strip()
+            total_listings = int(count_number)
+            return math.ceil(total_listings / 10)
+    except Exception as e:
+        logging.error(f"Failed to get total page count: {e}")
+    return 1
+
+
+# --- Extract Listings from HTML ---
+def extract_listing_data(html):
+    soup = BeautifulSoup(html, 'html.parser')
+    data = []
+
+    cards = soup.find_all('div', class_='card')
+    for card in cards:
         try:
-            # URL and Address from title link
-            link = card.select_one("a.stretched-link")
-            url = base_url + link["href"] if link else None
-            title_text = link.get_text(strip=True) if link else ""
-            address_line = card.select_one("span.card-title + span")
-            address = address_line.get_text(strip=True) if address_line else ""
-            full_adres = f"{title_text.strip()} {address.strip()}"
-
-            # City extraction (from postal code)
-            city_match = re.search(r"\d{4}[A-Z]{2}\s+(.+)", address)
-            city = city_match.group(1).strip() if city_match else None
-
-            # Price
-            price_text = card.select_one("div.pt-4 span.fw-bold")
-            price_match = re.search(r"€\s?([\d\.,]+)", price_text.text if price_text else "")
-            price = None
-            if price_match:
-                price_str = price_match.group(1).replace(".", "").replace(",", ".")
-                try:
-                    price = float(price_str)
-                except ValueError:
-                    pass
-
-            # Area
-            area = None
-            area_text = ""
-            for span in card.select("div.pt-4 span"):
-                if "m²" in span.text or "m" in span.text:
-                    area_text = span.text
-                    break
-            area_match = re.search(r"(\d+)\s*m", area_text)
-            if area_match:
-                area = int(area_match.group(1))
-
-            # Number of rooms (bedrooms)
-            rooms = None
-            room_span = card.find("span", string=re.compile(r"\d+\s+slaapkamer", re.I))
-            if room_span:
-                room_match = re.search(r"(\d+)\s+slaapkamer", room_span.text)
-                rooms = int(room_match.group(1)) if room_match else None
+            body = card.find('div', class_='card-body')
+            title_elem = body.find('span', class_='card-title').find('a')
+            title = title_elem.get_text(strip=True)
+            details_url = title_elem['href']
+            address = body.find_all('span')[1].get_text(strip=True).split('-')[0].strip()
 
             # Availability
-            availability = "Onbekend"
-            avail_span = card.select_one("span.small span.d-flex")
-            if avail_span:
-                avail_text = avail_span.get_text(strip=True)
-                if "beschikbaar vanaf" in avail_text.lower():
-                    availability = avail_text.strip()
+            available_from = None
+            small_section = body.find('span', class_='small')
+            if small_section:
+                text = small_section.get_text()
+                if 'Beschikbaar vanaf' in text:
+                    available_from = text.split('Beschikbaar vanaf')[-1].strip()
 
-            listings.append({
-                "full_adres": full_adres,
-                "url": url,
-                "city": city,
-                "price": price,
-                "area": area,
-                "num_rooms": rooms,
-                "available": availability
+            # Price and features
+            bottom_div = body.find('div', class_='pt-4 dotted-spans mt-auto')
+            spans = bottom_div.find_all('span')
+            price = spans[0].get_text(strip=True)
+            surface = spans[1].get_text(strip=True).replace(' m2', '').replace('m', '').strip()
+            bedrooms = spans[2].get_text(strip=True).split()[0]
+
+            # Status
+            status = None
+            badge = card.find('div', class_='badges')
+            if badge:
+                status_span = badge.find('span', class_='badge')
+                status = status_span.get_text(strip=True) if status_span else None
+
+            data.append({
+                'title': title,
+                'address': address,
+                'available_from': available_from,
+                'price_per_month': price,
+                'surface_m2': surface,
+                'bedrooms': bedrooms,
+                'details_url': details_url,
+                'status': status
             })
-        except Exception:
-            continue
+        except Exception as e:
+            logging.warning(f"Skipping listing due to error: {e}")
+    return data
 
-    return listings
+
+# --- Clean Helpers ---
+def split_available_from(val):
+    if val is None:
+        return None, None
+    match = re.match(r'(\d{2}-\d{2}-\d{4})', val)
+    date = match.group(1) if match else None
+    note = val.replace(date, '', 1).strip() if date else val.strip()
+    return date, note or None
+
+
+def clean_dataframe(df):
+    df[['available_from_date', 'available_from_note']] = df['available_from'].apply(
+        lambda x: pd.Series(split_available_from(x))
+    )
+
+    df['price_per_month'] = (
+        df['price_per_month']
+        .str.replace('€', '', regex=False)
+        .str.replace(',', '', regex=False)
+        .str.replace('.', '', regex=False)
+        .str.replace('-', '', regex=False)
+        .str.replace('/mnd', '', regex=False)
+        .str.replace(' ', '', regex=False)
+        .astype(float)
+    )
+
+    df['details_url'] = df['details_url'].apply(
+        lambda x: f"https://ikwilhuren.nu{x}" if not x.startswith('http') else x
+    )
+
+    df['is_available'] = df['status'].apply(lambda x: x == 'Te huur')
+
+    df['title'] = (
+        df['title']
+        .str.replace('Appartement ', '', regex=False)
+        .str.replace('Woning ', '', regex=False)
+        .str.strip()
+    )
+
+    return df
+
+def select_gemeente(driver, gemeente_naam="Gemeente Amsterdam", retries=1):
+    for attempt in range(retries):
+        try:
+            # Klik op het select2 veld om het te activeren
+            select_field = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "#select2-selAdres-container"))
+            )
+            select_field.click()
+
+            # Zoek het input veld binnen de dropdown
+            input_field = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "input.select2-search__field"))
+            )
+
+            input_field.clear()
+            input_field.send_keys(gemeente_naam)
+            time.sleep(1.5)  # even wachten op zoekresultaten
+            input_field.send_keys(Keys.ENTER)
+            time.sleep(1.5)  # vaak mislukt dit de eerste keer
+            input_field.send_keys(Keys.ENTER)
+            zoek_button = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((
+                        By.XPATH,
+                        "//button[contains(@class, 'btn-orange') and contains(@class, 'position-relative') and contains(text(), 'Zoeken')]"
+                    ))
+                )
+            zoek_button.click()
+            
+        except Exception as e:
+            logging.warning(f"Poging {attempt + 1} om gemeente te selecteren mislukt: {e}")
+        else:
+            logging.info(f"Gemeente '{gemeente_naam}' geselecteerd bij poging {attempt + 1}")
+            break
+
+# --- Main Scraping Flow ---
+def run_pipeline(local = False):
+    driver = get_driver(local=local)
+    driver.get(BASE_URL)
+    accept_cookies(driver)
+
+    from selenium.webdriver.common.keys import Keys
+
+    driver.get("https://ikwilhuren.nu/aanbod/")
+    select_gemeente(driver)
+
+    time.sleep(2)
+    total_pages = get_total_pages(driver)
+    logging.info(f"Totaal aantal pagina's: {total_pages}")
+
+    all_listings = []
+    for page_num in range(1, total_pages + 1):
+        url = f"{BASE_URL}aanbod/?page={page_num}" if page_num > 1 else f"{BASE_URL}aanbod/"
+        driver.get(url)
+        time.sleep(3)
+        html = driver.page_source
+        listings = extract_listing_data(html)
+        all_listings.extend(listings)
+        logging.info(f"Pagina {page_num} verwerkt ({len(listings)} woningen).")
+
+    driver.quit()
+
+    df = pd.DataFrame(all_listings)
+    df = clean_dataframe(df)
+
+
+    name = f"{NAME}_{CITY}"
+    output_path = os.path.join(OUTPUT_DIR, f"{name}.csv")
+    logging.info(f"Saving data to {output_path}")
+
+    # Use 'details_url' as the unique link identifier
+    df = df.rename(columns={'details_url': 'link'})
+
+
+    df['date_scraped'] = pd.Timestamp.now()
+
+    # 
+
+    if os.path.exists(output_path):
+        df_old = pd.read_csv(output_path)
+        # Mark all as inactive by default
+        df_old['is_active'] = False
+        # Mark new scrape as active
+        df['is_active'] = True
+
+        # Mark is_new: True if link not in previous scrape
+        df['is_new'] = ~df['link'].isin(df_old['link'])
+        if 'is_new' not in df_old.columns:
+            df_old['is_new'] = False
+
+        # Combine, keeping all rows, updating 'is_active' and 'is_new' for current scrape
+        df_combined = pd.concat([df_old, df], ignore_index=True)
+        # Ensure 'date_scraped' is datetime for proper sorting
+        df_combined['date_scraped'] = pd.to_datetime(df_combined['date_scraped'], errors='coerce')
+        # For each link, keep the most recent row (by date_scraped)
+        df_combined = df_combined.sort_values('date_scraped').drop_duplicates(subset=['link'], keep='last')
+    else:
+        df['is_active'] = True
+        df['is_new'] = True
+        df_combined = df
+
+        df_combined.to_csv(output_path, index=False)
+        logging.info(f"Data saved to {output_path}")
+
+    # address must contain Amsterdam eg: "1014BG Amsterdam" is kept 2671HZ Naaldwijk is removed
+    df_combined = df_combined[df_combined['address'].str.contains(CITY, case=False, na=False)]
+    df_combined.to_csv(output_path, index=False)
+    logging.info(f"Data saved to {output_path}")
 
 if __name__ == "__main__":
-    from src.utils.get_url import get_html
-    url = 'https://ikwilhuren.nu/aanbod/'
-    html = get_html(url)
-    listings = extract_ikwilhuren_data(html)
-    for listing in listings:
-        print(listing)
-    url_format = 'https://ikwilhuren.nu/aanbod/?page={page}'
+    run_pipeline()
+    logging.info(f"[END] Scraping completed for {NAME} in {CITY}.")

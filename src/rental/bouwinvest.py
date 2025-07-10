@@ -85,7 +85,7 @@ def extract_listings_from_html(html):
     for listing in listings:
         try:
             data.append({
-                "adress": listing.find("span", class_="h2").get_text(strip=True),
+                "address": listing.find("span", class_="h2").get_text(strip=True),
                 "location": listing.find("span", class_="paragraph fw-light").get_text(strip=True),
                 "description": listing.find("span", class_="paragraph").get_text(strip=True),
                 "availability": listing.find("span", class_=re.compile("bar__top")).get_text(strip=True),
@@ -108,7 +108,7 @@ def geocode_forward(df):
 
     lats, lons = [], []
     for _, row in df.iterrows():
-        address = row['adress']
+        address = row['address']
         location = row.get('location', '')
         full_address = f"{address}, {location}" if location.lower() not in address.lower() else address
         url = f"https://geocode.maps.co/search?q={full_address}&api_key={GEOCODE_API}"
@@ -131,8 +131,8 @@ def geocode_forward(df):
     return df
 
 # --- MAIN SCRAPER ---
-def scrape_bouwinvest(city):
-    driver = get_driver(local=True)
+def scrape_bouwinvest(city, local=False):
+    driver = get_driver(local=local)
     driver.get(BASE_URL)
     accept_cookies(driver)
     search_location(driver, city)
@@ -175,8 +175,9 @@ def scrape_bouwinvest(city):
     df['date_scraped'] = pd.Timestamp.now()
     return df
 
-def run_pipeline():
-    df = scrape_bouwinvest(CITY)
+def run_pipeline(local = False):
+    logging.info('[START] Scraping Bouwinvest properties in Amsterdam...')
+    df = scrape_bouwinvest(CITY, local=local)
     df = geocode_forward(df)
 
     # Add neighborhood & preference if available
@@ -207,7 +208,8 @@ def run_pipeline():
     df.to_csv(out_path, index=False)
     logging.info(f"Saved {len(df)} rows to {out_path}")
 
-    print(df.head())
+    logging.info("[END] Scraping completed.")
+
 
 if __name__ == "__main__":
     run_pipeline()
