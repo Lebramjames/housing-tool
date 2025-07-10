@@ -13,3 +13,6 @@ pyperclip
 streamlit
 plotly
 geopy
+tqdm
+urllib3
+rapidfuzz

@@ -9,25 +9,32 @@ import logging
 # from src.rental import send_email
 # from src.rental import ikwilhuren
 
-import send_email
-import vbt_huren
-import bouwinvest
-import vesteda
-import ikwilhuren
+from src.rental import coordinate_finder
+
+# import send_email
+# import vbt_huren
+# import bouwinvest
+# import vesteda
+# import ikwilhuren
+# import coordinate_finder
 
 def process_rental_main():
 
-    vbt_huren.run_pipeline(local=False)
-    send_email.run_pipeline(rental_company='vbt_huren')
+    # vbt_huren.run_pipeline(local=False)
+    # vesteda.run_pipeline(local=False)
+    # ikwilhuren.run_pipeline(local=False)
+    # bouwinvest.run_pipeline(local=False)
 
-    bouwinvest.run_pipeline(local=False)
-    send_email.run_pipeline(rental_company='bouwinvest')
 
-    vesteda.run_pipeline(local=False)
-    send_email.run_pipeline(rental_company='vesteda')
+    coordinate_finder.run_pipeline()
 
-    ikwilhuren.run_pipeline(local=False)
-    send_email.run_pipeline(rental_company='ikwilhuren')
+    # send_email.run_pipeline(rental_company='vbt_huren')
+
+
+    # send_email.run_pipeline(rental_company='bouwinvest')
+    # send_email.run_pipeline(rental_company='vesteda')
+
+    # send_email.run_pipeline(rental_company='ikwilhuren')
 
 if __name__ == "__main__":
     process_rental_main()
