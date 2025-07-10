@@ -18,6 +18,7 @@ jobs:
 
     steps:
       - name: Checkout code
+      
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GH_PATH }}
@@ -37,10 +38,11 @@ jobs:
         run: |
           git config --global user.name 'Lebramjames'
           git config --global user.email 'bramgriffioen98@gmail.com'
-          git add data/huren/properties_amsterdam.csv
-
+          git add data/huren/*.csv
+          
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
             git commit -m "Update Amsterdam property data $(date +'%Y-%m-%d')"
             git push origin main
+          fi
