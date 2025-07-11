@@ -8,6 +8,14 @@ import requests
 import urllib3
 from tqdm import tqdm
 
+from datetime import datetime
+
+
+from src.utils.google_sheets import read_sheet_to_df
+from src.utils.config import logging, GEOCODED_STREETS, RENTAL_DB
+from src.utils.google_sheets import append_row_to_sheet
+
+
 # Disable SSL warnings (for VPN / MITM environments)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -34,40 +42,56 @@ def extract_street(address):
         return match.group(0).strip() if match else address.strip()
     return None
 
+
+def finalize_dataframe(df):
+
+    df['street'] = df['street']
+    df['latitude'] = df['latitude'].astype(float)
+    df['longitude'] = df['longitude'].astype(float)
+
+    df['info1'] = df['neighborhood']
+    df['info2'] = df['district']
+    df['info3'] = df['city']
+    df['postcode'] = df['postcode']
+
+    df['location'] = df.apply(lambda x: f"{x['latitude']}, {x['longitude']}" if pd.notna(x['latitude']) and pd.notna(x['longitude']) else None, axis=1)
+    df['display_name'] = df['display_name']
+    df['date_updated'] = pd.to_datetime(df['date_updated']).dt.strftime('%Y-%m-%d')
+
+
+    columns = [
+        "street", "latitude", "longitude", "location", "info1", 
+        "info2", "info3", "postcode", "display_name", "date_updated"
+    ]
+    # Ensure all columns exist, fill missing ones with None
+    for col in columns:
+        if col not in df.columns:
+            df[col] = None
+    return df[columns].values.tolist()
+
 def run_pipeline(pipeline_name="rental"):
-    input_type = INPUT[pipeline_name]
-    # input_dir = INPUT[]
-    # Step 1: Load all unique addresses from input files
-    all_addresses = []
+    # Step 1: Load data
+    geocoded_streets_df = read_sheet_to_df(GEOCODED_STREETS, 0)
+    streets_df = read_sheet_to_df(RENTAL_DB, 0)
 
-    for file in os.listdir(input_type):
-        if file.endswith(".csv"):
-            df = pd.read_csv(os.path.join(input_type, file))
-            if 'address' in df.columns:
-                all_addresses.extend(df['address'].dropna().unique())
+    streets = set(streets_df['street'].dropna().unique())
+    geocoded_streets = set(geocoded_streets_df['street'].dropna().unique())
 
-    streets = sorted(set(filter(None, [extract_street(a) for a in all_addresses])))
-    print(streets)
-    # Step 2: Load already geocoded streets
-    if os.path.exists(OUTPUT_FILE):
-        existing_df = pd.read_csv(OUTPUT_FILE)
-        already_done = set(existing_df['street'].str.lower().str.strip())
-    else:
-        existing_df = pd.DataFrame(columns=["street", "lat", "lon", "neighborhood", "district", "city", "postcode", "display_name"])
-        already_done = set()
+    # Step 2: Find streets that still need to be geocoded
+    missing_streets = streets - geocoded_streets
+    print(f"Missing streets to geocode: {len(missing_streets)}")
 
-    # Step 3: Geocode missing streets
+    already_done = set(geocoded_streets_df['street'].str.lower().str.strip().dropna().unique())
     new_rows = []
 
-    for street in tqdm(streets, desc="Geocoding streets"):
+    for street in tqdm(missing_streets, desc="Geocoding streets"):
         normalized_street = street.lower().strip()
-
         if normalized_street in already_done:
             continue
 
         try:
             # Format query
-            street_param = f"1 {street}".lower().replace(" ", "+")
+            street_param = f"2 {street}".lower().replace(" ", "+")
             city_param = CITY_FALLBACK.lower().replace(" ", "+")
             url = (
                 f"https://geocode.maps.co/search?"
@@ -86,7 +110,7 @@ def run_pipeline(pipeline_name="rental"):
                 lon = entry.get("lon")
                 display_name = entry.get("display_name", "")
 
-                # Parse components from display_name
+                # Parse parts from display_name
                 parts = display_name.split(", ")
                 neighborhood = parts[2] if len(parts) > 2 else None
                 district = parts[3] if len(parts) > 3 else None
@@ -95,41 +119,50 @@ def run_pipeline(pipeline_name="rental"):
 
                 row = {
                     "street": street,
-                    "lat": lat,
-                    "lon": lon,
+                    "latitude": lat,
+                    "longitude": lon,
                     "neighborhood": neighborhood,
+                    "location": f"{lat}, {lon}" if lat and lon else None,
                     "district": district,
                     "city": city,
                     "postcode": postcode,
-                    "display_name": display_name
+                    "display_name": display_name,
+                    "date_updated": datetime.now().strftime("%Y-%m-%d")
                 }
             else:
                 row = {
                     "street": street,
-                    "lat": None,
-                    "lon": None,
+                    "latitude": None,
+                    "longitude": None,
                     "neighborhood": None,
+                    "location": None,
                     "district": None,
                     "city": None,
                     "postcode": None,
-                    "display_name": None
+                    "display_name": None,
+                    "date_updated": datetime.now().strftime("%Y-%m-%d")
                 }
 
-            # Save row immediately
-            pd.DataFrame([row]).to_csv(OUTPUT_FILE, mode='a', header=not os.path.exists(OUTPUT_FILE), index=False)
-            already_done.add(normalized_street)
             new_rows.append(row)
-
-            # Respect API rate limits
-            time.sleep(1)
+            already_done.add(normalized_street)
+            time.sleep(1)  # Respect API rate limits
 
         except Exception as e:
             print(f"❌ Error geocoding {street}: {e}")
 
-    print(f"\n✅ Geocoding complete. {len(new_rows)} new streets added to {OUTPUT_FILE}.")
-
+    if new_rows:
+        df_new = pd.DataFrame(new_rows)
+        append_row_to_sheet(df_new, GEOCODED_STREETS)
+        print(f"\n✅ Geocoding complete. {len(new_rows)} new streets added to Google Sheet.")
+    else:
+        print("✅ No new streets to geocode.")
 
 if __name__ == "__main__":
     run_pipeline()
 
 # %%
+
+
+df = read_sheet_to_df(GEOCODED_STREETS, 0)
+
+df

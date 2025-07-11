@@ -15,6 +15,9 @@ jobs:
       GOOGLE_KEY: ${{ secrets.GOOGLE_KEY }}
       VESTEDA_USER: ${{ secrets.VESTEDA_USER }}
       VESTEDA_PASSWORD: ${{ secrets.VESTEDA_PASSWORD }}
+      GOOGLE_SHEETS_API_KEY: ${{ secrets.GOOGLE_SHEETS_API_KEY }}
+      GOOGLE_SERVICE_JSON_KEY: ${{ secrets.GOOGLE_SERVICE_JSON_KEY }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
     steps:
       - name: Checkout code

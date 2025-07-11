@@ -16,3 +16,4 @@ geopy
 tqdm
 urllib3
 rapidfuzz
+gspread 

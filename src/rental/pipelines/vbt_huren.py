@@ -18,12 +18,12 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from webdriver_manager.chrome import ChromeDriverManager
 
-import logging
+from src.utils import *
+from src.utils.config import logging
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "huren")
 BASE_URL = "https://vbtverhuurmakelaars.nl/woningen"
-EDGE_DRIVER_PATH = r"C:\Users\bgriffioen\OneDrive - STX Commodities B.V\Desktop\funda-project\funda-tool\src\utils\msedgedriver.exe"
+EDGE_DRIVER_PATH = os.getenv("EDGE_DRIVER_PATH", "msedgedriver")
 
 def get_driver(local=False):
     # Common browser arguments
@@ -127,7 +127,8 @@ def parse_property_cards(html):
         status_map = {
             'Beschikbaar': 'Beschikbaar',
             'iDeze woning is momenteel aangeboden aan een kandidaat. Je kunt nog reageren op deze woning, je komt dan op de wachtlijst.Aangeboden': 'Aangeboden',
-            'iDeze woning is verhuurd. Je kunt niet meer reageren op deze woning.Verhuurd': 'Verhuurd'
+            'iDeze woning is verhuurd. Je kunt niet meer reageren op deze woning.Verhuurd': 'Verhuurd',
+            "Er zijn reeds meer dan 200 reacties op deze woning. Reageren is op dit moment niet mogelijk.": "Verhuurd"
         }
         prop['status'] = status_map.get(prop['status'], prop['status'])
         # change beschikbaar to True 
@@ -148,119 +149,42 @@ def extract_coordinates(html):
     return [{'longitude': float(lon), 'latitude': float(lat)} for lon, lat in matches]
 
 
-# def get_neighborhoods_from_coordinates(df):
-#     from geopy.geocoders import Nominatim
-#     from geopy.extra.rate_limiter import RateLimiter
 
-#     df['lat_lon'] = list(zip(df['latitude'].round(5), df['longitude'].round(5)))
-#     unique_coords = df['lat_lon'].dropna().unique()
 
-#     geolocator = Nominatim(user_agent="amsterdam-housing-scraper")
-#     geocode = RateLimiter(geolocator.reverse, min_delay_seconds=1, error_wait_seconds=2, swallow_exceptions=True)
+def finalize_dataframe(df):
 
-#     coord_to_neighborhood = {}
-#     for coord in unique_coords:
-#         try:
-#             location = geocode(coord, exactly_one=True, language="nl")
-#             if location and hasattr(location, "raw"):
-#                 suburb = location.raw.get("address", {}).get("suburb", "")
-#                 wijk = location.raw.get("address", {}).get("neighbourhood", "")
-#                 buurt = location.raw.get("address", {}).get("quarter", "")
-#                 coord_to_neighborhood[coord] = suburb or wijk or buurt or ""
-#             else:
-#                 coord_to_neighborhood[coord] = ""
-#         except Exception:
-#             coord_to_neighborhood[coord] = ""
+    df['address_full'] = df['address'] + ', ' + df['city']
+    df['street'] = df['address'].apply(lambda x: re.match(r"^(.*?)(\d)", x).group(1).strip() if re.match(r"^(.*?)(\d)", x) else x)
+    df['price'] = df['price_per_month']
+    df['squared_m2'] = df['surface_area_m2'].astype(float)
+    df['price_per_squared_m2'] = df['price'] / df['squared_m2']
+    df['is_available'] = df['is_available']
 
-#     df['neighborhood'] = df['lat_lon'].map(coord_to_neighborhood)
-#     df.drop(columns=['lat_lon'], inplace=True)
-#     return df
+    # is available from available_from (currently in Dutch convert to DD/MM/YYYY)
+    df['available_from'] = pd.to_datetime(df['available_from'], errors='coerce', format='%d-%m-%Y').dt.strftime('%d/%m/%Y')
 
-def get_neighborhoods_from_coordinates(df):
-    import os
-    import json
-    from pathlib import Path
-    from shapely.geometry import Point, Polygon
+    df['note'] = df['note']
 
-    # Load neighborhoods geojson
-    current_dir = Path(__file__).resolve().parent
-    parent_dir = current_dir.parent.parent
-    json_path = os.path.join(parent_dir, 'data', 'neighborhoods_amsterdam.json')
-    with open(json_path, 'r', encoding='utf-8') as f:
-        geojson = json.load(f)
+    df['link'] = 'https://vbtverhuurmakelaars.nl' + df['detail_url']
+    df['rental_company'] = 'vbt_verhuurmakelaars'
+    df['date_scraped'] = pd.Timestamp.now()
 
-    # Prepare polygons
-    neighborhoods = []
-    for feature in geojson['features']:
-        name = feature['properties'].get('neighborhood', '')
-        coords = feature['geometry']['coordinates']
-        # Handle both Polygon and MultiPolygon
-        if feature['geometry']['type'] == 'Polygon':
-            polygons = [Polygon(coords[0])]
-        elif feature['geometry']['type'] == 'MultiPolygon':
-            polygons = [Polygon(poly[0]) for poly in coords]
-        else:
-            continue
-        neighborhoods.append((name, polygons))
+    required_columns = [
+        'address_full',
+        'street',
+        'price',
+        'squared_m2',
+        'price_per_squared_m2',
+        'is_available',
+        'note',
+        'date_scraped',
+        'link',
+        'available_from',
+        'rental_company'
+    ]
 
-    def find_neighborhood(lat, lon):
-        point = Point(lon, lat)
-        for name, polygons in neighborhoods:
-            for poly in polygons:
-                if poly.contains(point):
-                    return name
-        return ""
-
-    df['neighborhood'] = df.apply(
-        lambda row: find_neighborhood(row['latitude'], row['longitude'])
-        if pd.notnull(row.get('latitude')) and pd.notnull(row.get('longitude')) else "",
-        axis=1
-    )
+    df = df[required_columns]
     return df
-
-
-def get_preference_from_coordinates(df):
-    import os
-    import json
-    from pathlib import Path
-    from shapely.geometry import Point, Polygon
-
-    # Load preference geojson
-    current_dir = Path(__file__).resolve().parent
-    parent_dir = current_dir.parent.parent
-    json_path = os.path.join(parent_dir, 'data', 'preference.json')
-    with open(json_path, 'r', encoding='utf-8') as f:
-        geojson = json.load(f)
-
-    # Prepare polygons
-    preferences = []
-    for feature in geojson['features']:
-        name = feature['properties'].get('preference', '')
-        coords = feature['geometry']['coordinates']
-        # Handle both Polygon and MultiPolygon
-        if feature['geometry']['type'] == 'Polygon':
-            polygons = [Polygon(coords[0])]
-        elif feature['geometry']['type'] == 'MultiPolygon':
-            polygons = [Polygon(poly[0]) for poly in coords]
-        else:
-            continue
-        preferences.append((name, polygons))
-
-    def is_in_preference(lat, lon):
-        point = Point(lon, lat)
-        for name, polygons in preferences:
-            for poly in polygons:
-                if poly.contains(point):
-                    return True
-        return False
-
-    df['preference'] = df.apply(
-        lambda row: is_in_preference(row['latitude'], row['longitude'])
-        if pd.notnull(row.get('latitude')) and pd.notnull(row.get('longitude')) else False,
-        axis=1
-    )
-    return df
-
 
 def scrape_all_pages(driver, max_pages=100):
     df = pd.DataFrame()
@@ -296,15 +220,9 @@ def run_pipeline(local  = False):
         accept_cookies(driver)
         page_settings(driver)
         df = scrape_all_pages(driver)
-        df = get_neighborhoods_from_coordinates(df)
-        df = get_preference_from_coordinates(df)
+        df = finalize_dataframe(df)
 
-        df['price_per_m2'] = df['price_per_month'] / df['surface_area_m2']
-
-        df_old = pd.read_csv(f"{OUTPUT_DIR}/properties_amsterdam.csv") if os.path.exists(f"{OUTPUT_DIR}/properties_amsterdam.csv") else pd.DataFrame()
-        if not df_old.empty:
-            df = pd.concat([df_old, df]).drop_duplicates(subset=['detail_url'], keep='last').reset_index(drop=True)
-        df.to_csv(f"{OUTPUT_DIR}/properties_amsterdam.csv", index=False)
+        append_row_to_sheet(df, RENTAL_DB)
         logging.info(f"[DONE] Scraped {len(df)} properties and saved to CSV.")
     finally:
         driver.quit()

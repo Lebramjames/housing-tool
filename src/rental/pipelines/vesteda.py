@@ -31,7 +31,8 @@ import time
 from dotenv import load_dotenv
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+from src.utils import *
+from src.utils.config import logging
 
 NAME = "vesteda"
 CITY = "amsterdam"
@@ -39,7 +40,7 @@ CITY = "amsterdam"
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "huren")
 BASE_URL = "https://hurenbij.vesteda.com/login"
 
-EDGE_DRIVER_PATH = r"C:\Users\bgriffioen\OneDrive - STX Commodities B.V\Desktop\funda-project\funda-tool\src\utils\msedgedriver.exe"
+EDGE_DRIVER_PATH = os.getenv("EDGE_DRIVER_PATH", "msedgedriver")
 
 def get_driver(local=False):
     # Common browser arguments
@@ -164,36 +165,23 @@ def login_vesteda(driver, user_name, password):
         print(f"⚠️ Login attempt {attempt} failed. Retrying...")
 
 
-def process_data(dict):
-    df = pd.DataFrame(dict)
-
-    # Convert 'price' to integer
+def finalize_dataframe(data):
+    df = pd.DataFrame(data)
     df['price'] = df['price'].str.replace(',-', '').str.replace('.', '',
                                                 regex=False).astype(int)
 
-    # /object/8aa1d02b7b8115234913b26207d6120b/ to https://hurenbij.vesteda.com/object/8aa1d02b7b8115234913b26207d6120b/
     df['link'] = df['link'].apply(lambda x: f"https://hurenbij.vesteda.com{x}" if x else None)
+    df['address_full'] = df['address'] + ', ' + df['location']
+    df['street'] = df['address'].apply(lambda x: re.match(r"^(.*?)(\d)", x).group(1).strip() if re.match(r"^(.*?)(\d)", x) else x)
+    df['squared_m2'] = df['area'].str.replace(' m2', '').astype(int)
+    df['price_per_m2'] = df['price'] / df['squared_m2']
+    df['is_available'] = df['status_note'].apply(lambda x: True if x and 'Beschikbaar' in x else False)
+    df['note'] = df['status_note']
+    df['date_scraped'] = pd.Timestamp.now()
+    df['rental_company'] = NAME    
+    df['available_from_date']  = None
 
-    # area 93 m2 to 93
-    df['area'] = df['area'].str.replace(' m2', '').astype(int)
-    df['status_note'].unique()
-
-    # array(['Voor deze woning zijn al veel bezichtigingsaanvragen binnen. Vergroot uw kans door een andere woning te selecteren.'],
-        #   dtype=object) if this is the case make is_available False else True
-    df['is_available'] = df['status_note'].apply(
-        lambda x: False if "al veel bezichtigingsaanvragen" in x else True)
-    # drop status_note
-    df = df.drop(columns=['status_note'])
-
-    df['price'] = df['price'].astype(int)
-
-    # Convert 'area' to integer
-    df['area'] = df['area'].astype(int)
-
-    # Ensure 'is_available' is boolean
-    df['is_available'] = df['is_available'].astype(bool)
-    df['date_scraped'] = pd.to_datetime('now')
-
+    df = df[['address_full', 'street', 'price', 'squared_m2', 'price_per_m2', 'is_available', 'note', 'date_scraped', 'link', 'available_from_date', 'rental_company']]
     return df
 
 def run_pipeline(local=False):
@@ -215,36 +203,14 @@ def run_pipeline(local=False):
     driver.get("https://hurenbij.vesteda.com/zoekopdracht/")
     # Wait for the page to load
     html = driver.page_source
+    driver.quit()
     dict = extract_listings(html)
 
+    df = finalize_dataframe(dict)
 
-    df = process_data(dict)
-    OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "huren")
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
-    
-    name = f"{NAME}_{CITY}"
+    append_row_to_sheet(df, RENTAL_DB)
 
-    output_path = os.path.join(OUTPUT_DIR, f"{name}.csv")
-    logging.info(f"Saving data to {output_path}")
-
-    if os.path.exists(output_path):
-        df_old = pd.read_csv(output_path)
-        # Mark all old entries as is_new = False
-        df_old['is_new'] = False
-        # Mark new entries as is_new = True if their link is not in old data
-        df['is_new'] = ~df['link'].isin(df_old['link'])
-        # Combine old and new, keeping all unique links, with new entries marked correctly
-        df_combined = pd.concat([df_old, df[df['is_new']]], ignore_index=True).drop_duplicates(subset=['link'], keep='last')
-    else:
-        df['is_new'] = True
-        df_combined = df
-
-    df_combined.to_csv(output_path, index=False)
-    logging.info(f"Data saved to {output_path}")
-
-    driver.quit()
     logging.info(f"[END] Scraping completed for {NAME} in {CITY}.") 
     
 if __name__ == "__main__":
-    run_pipeline()
+    run_pipeline(local=True)

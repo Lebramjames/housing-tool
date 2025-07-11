@@ -21,6 +21,9 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 
+from src.utils import *
+from src.utils.config import logging
+
 # --- Configuration ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -28,7 +31,7 @@ NAME = "ikwilhuren"
 CITY = "amsterdam"
 
 BASE_URL = "https://ikwilhuren.nu/"
-EDGE_DRIVER_PATH = r"C:\Users\bgriffioen\OneDrive - STX Commodities B.V\Desktop\funda-project\funda-tool\src\utils\msedgedriver.exe"
+EDGE_DRIVER_PATH = os.getenv("EDGE_DRIVER_PATH", "msedgedriver")
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "huren")
 
 
@@ -208,10 +211,34 @@ def select_gemeente(driver, gemeente_naam="Gemeente Amsterdam", retries=1):
             zoek_button.click()
             
         except Exception as e:
-            logging.warning(f"Poging {attempt + 1} om gemeente te selecteren mislukt: {e}")
+            logging.warning(f"Poging {attempt + 1} om gemeente te selecteren mislukt")
         else:
             logging.info(f"Gemeente '{gemeente_naam}' geselecteerd bij poging {attempt + 1}")
             break
+
+
+def finalize_dataframe(df):
+    # columns to be filled in 
+    # address_full	street	price	squared_m2	price_per_squared_m2	is_available	note	date_scraped	link	available_from	rental_company	is_new
+
+    df['address_full'] = df['address'] + ', ' + df['city']
+    df['price'] = df['price_per_month']
+    df['surface_m2'] = df['surface_m2'].astype(float)
+    df['price_per_m2'] = df['price'] / df['surface_m2']
+    df['street'] = df['address'].apply(lambda x: re.match(r"^(.*?)(\d)", x).group(1).strip() if re.match(r"^(.*?)(\d)", x) else x)
+    df['is_available'] = df['status'].apply(lambda x: True if x and 'Te huur' in x else False)
+    df['note'] = df['available_from_note']
+    df['link'] = df['details_url']
+    df['date_scraped'] = pd.Timestamp.now()
+
+    df['rental_company'] = NAME
+    # retrieve available_from string in DD/MM/YYYY format using regex
+    df['available_from_date'] = df['available_from_date'].str.extract(r'(\d{1,2}-\d{1,2}-\d{4})')[0]
+    # Add date_scraped column
+    df['date_scraped'] = pd.Timestamp.now()
+    # drop the rest of the columsn  
+    df = df[['address_full', 'street', 'price', 'surface_m2', 'price_per_m2', 'is_available', 'note', 'date_scraped', 'link', 'available_from_date', 'rental_company']]
+    return df
 
 # --- Main Scraping Flow ---
 def run_pipeline(local = False):
@@ -248,41 +275,14 @@ def run_pipeline(local = False):
     output_path = os.path.join(OUTPUT_DIR, f"{name}.csv")
     logging.info(f"Saving data to {output_path}")
 
-    # Use 'details_url' as the unique link identifier
-    df = df.rename(columns={'details_url': 'link'})
+    df = finalize_dataframe(df)
+
+    append_row_to_sheet(df, RENTAL_DB)
+    return df
 
 
-    # Add date_scraped column
-    df['date_scraped'] = pd.Timestamp.now()
-
-    if os.path.exists(output_path):
-        df_old = pd.read_csv(output_path)
-        # Mark all as inactive by default
-        df_old['is_active'] = False
-        # Mark new scrape as active
-        df['is_active'] = True
-
-        # Mark is_new: True if link not in previous scrape
-        df['is_new'] = ~df['link'].isin(df_old['link'])
-        if 'is_new' not in df_old.columns:
-            df_old['is_new'] = False
-
-        # Combine, keeping all rows, updating 'is_active' and 'is_new' for current scrape
-        df_combined = pd.concat([df_old, df], ignore_index=True)
-        # Ensure 'date_scraped' is datetime for proper sorting
-        df_combined['date_scraped'] = pd.to_datetime(df_combined['date_scraped'], errors='coerce')
-        # For each link, keep the most recent row (by date_scraped)
-        df_combined = df_combined.sort_values('date_scraped').drop_duplicates(subset=['link'], keep='last')
-    else:
-        df['is_active'] = True
-        df['is_new'] = True
-        df_combined = df
-
-    # address must contain Amsterdam eg: "1014BG Amsterdam" is kept 2671HZ Naaldwijk is removed
-    df_combined = df_combined[df_combined['city'].str.contains(CITY, case=False, na=False)]
-    df_combined.to_csv(output_path, index=False)
-    logging.info(f"Data saved to {output_path}")
+    
 
 if __name__ == "__main__":
-    run_pipeline(local=True)
+    df = run_pipeline(local=True)
     logging.info(f"[END] Scraping completed for {NAME} in {CITY}.")
