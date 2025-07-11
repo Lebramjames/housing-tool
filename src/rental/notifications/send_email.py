@@ -227,3 +227,81 @@ def run_pipeline(rental_company='vbt_huren'):
 if __name__ == "__main__":
     body = run_pipeline(rental_company='ikwilhuren')
     print(body)
+# %%
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import os
+
+GOOGLE_KEY = os.getenv("GOOGLE_KEY")
+
+import pandas as pd
+import os
+from pathlib import Path
+
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+from src.utils.config import DATA_DIR
+
+
+def generate_email_body(df, *, title, columns, url_column=None, link_prefix="", max_rows=10, filters=None):
+    df = df.copy()
+
+    if filters:
+        for col, func in filters.items():
+            df = df[df[col].apply(func)]
+
+    df = df.head(max_rows)
+
+    body = f"{title}:\n\n"
+    body += " ".join([f"{col['header']:<{col['width']}}" for col in columns]) + "\n"
+    body += "-" * 70 + "\n"
+
+    for _, row in df.iterrows():
+        line = ""
+        for col in columns:
+            val = row.get(col['field'], '')
+            if isinstance(val, float):
+                val = f"{val:.2f}"
+            elif isinstance(val, int):
+                val = f"{val}"
+            elif pd.isnull(val):
+                val = ''
+            val = str(val)[:col['width']].ljust(col['width'])
+            line += val + " "
+        body += line.strip() + "\n"
+        if url_column:
+            url = row[url_column]
+            if not url.startswith("http"):
+                url = link_prefix + url
+            body += f"🔗 {url}\n\n"
+    return body
+
+
+def create_vbt_body():
+    path = os.path.join(DATA_DIR, 'huren', 'enriched_properties_amsterdam.csv')
+    df = pd.read_csv(path)
+
+    df = df[df['is_available'] == True]
+    if 'preference' in df.columns:
+        df = df[df['preference'] == True]
+
+    df['price_per_m2'] = df['price_per_month'] / df['surface_area_m2']
+    df['link'] = 'https://vbtverhuurmakelaars.nl' + df['detail_url']
+
+    columns = [
+        {"field": "address", "header": "Address", "width": 35},
+        {"field": "price_per_month", "header": "€ Rent", "width": 8},
+        {"field": "surface_area_m2", "header": "m²", "width": 5},
+        {"field": "price_per_m2", "header": "€/m²", "width": 6},
+        {"field": "number_of_responses", "header": "Resp.", "width": 6},
+        {"field": "neighborhood", "header": "Neighborhood", "width": 15},
+    ]
+
+    return generate_email_body(df, title="🏢 VBT Rentals (available)", columns=columns, url_column="link")
+
+
+body = create_vbt_body()
+
+print(body)

@@ -19,7 +19,11 @@ CITY_FALLBACK = "Amsterdam"
 COUNTRY = "NL"
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "geocoded_streets")
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "geocoded_streets.csv")
-INPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "huren")
+
+INPUT = { 
+    'rental' : os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "huren"), 
+    'buying' : None
+}
 
 # Ensure output directory exists
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -30,13 +34,15 @@ def extract_street(address):
         return match.group(0).strip() if match else address.strip()
     return None
 
-def run_pipeline():
+def run_pipeline(pipeline_name="rental"):
+    input_type = INPUT[pipeline_name]
+    # input_dir = INPUT[]
     # Step 1: Load all unique addresses from input files
     all_addresses = []
 
-    for file in os.listdir(INPUT_DIR):
+    for file in os.listdir(input_type):
         if file.endswith(".csv"):
-            df = pd.read_csv(os.path.join(INPUT_DIR, file))
+            df = pd.read_csv(os.path.join(input_type, file))
             if 'address' in df.columns:
                 all_addresses.extend(df['address'].dropna().unique())
 

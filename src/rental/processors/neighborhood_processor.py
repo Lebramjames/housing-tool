@@ -1,16 +1,15 @@
-# %%
-# %%
-# %%
+# %% neighborhood_processor.py
 import os
 import re
 import pandas as pd
 from rapidfuzz import process, fuzz
 from tqdm import tqdm
+from pathlib import Path
 
-# Paths
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-INPUT_DIR = os.path.join(BASE_DIR, "data", "huren")
-OUTPUT_DIR = os.path.join(BASE_DIR, "data", "geocoded_streets")
+from src.utils import *
+
+INPUT_DIR = os.path.join(DATA_DIR ,  "huren")
+OUTPUT_DIR = os.path.join(DATA_DIR, "geocoded_streets")
 GEOCODED_PATH = os.path.join(OUTPUT_DIR, "geocoded_streets.csv")
 
 # Load geocoded streets
@@ -73,5 +72,7 @@ def run_pipeline():
         df.to_csv(output_path, index=False)
         print(f"✅ Enriched and saved to {output_path}")
 
+# %%
+# %
 if __name__ == "__main__":
     run_pipeline()

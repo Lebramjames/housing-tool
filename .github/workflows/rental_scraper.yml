@@ -4,12 +4,12 @@ on:
   push:
     branches:
       - main
-
   schedule:
     - cron: '30 2 * * *'  # runs daily at 2:30 UTC
 
 jobs:
   build:
+    if: github.actor != 'github-actions'
     runs-on: ubuntu-latest
     env:
       GOOGLE_KEY: ${{ secrets.GOOGLE_KEY }}
@@ -18,7 +18,6 @@ jobs:
 
     steps:
       - name: Checkout code
-      
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GH_PATH }}
@@ -32,7 +31,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run scraper
-        run: python src/rental/process_rental_main.py
+        run: python main.py rental
 
       - name: Commit and push results
         run: |
@@ -43,6 +42,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Update Amsterdam property data $(date +'%Y-%m-%d')"
+            git commit -m "Update Amsterdam property data $(date +'%Y-%m-%d') [skip ci]"
             git push origin main
           fi
