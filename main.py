@@ -2,7 +2,7 @@
 # main.py or similar
 
 import argparse
-from rental.main import process_rental_main
+from src.rental.main import process_rental_main
 
 def main():
     parser = argparse.ArgumentParser()
