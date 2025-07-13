@@ -74,7 +74,6 @@ def run_pipeline():
 
     # Filter for new listings (assuming 'is_new' column exists)
     # convert TRUE and FALSE to boolean
-    df.to_clipboard(index=False) 
     # convert TRUE to True and FALSE to False
     df['is_new'] = df['is_new'].replace({'TRUE': True, 'FALSE': False})
     df['is_available'] = df['is_available'].replace({'TRUE': True, 'FALSE': False})
