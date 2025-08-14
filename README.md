@@ -5,3 +5,6 @@ This project reads the Funda website with settings:
 - Price range: €0 - €500,000  
 - Property type: Apartment  w
 - [Streamlit app](https://funda-tool-dukbjnrgsvxrkugsobopki.streamlit.app/)
+
+
+
